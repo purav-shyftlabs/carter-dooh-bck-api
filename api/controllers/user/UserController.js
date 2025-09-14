@@ -30,5 +30,39 @@ module.exports = {
       errorHelper.logError(err, 'UserController.createUser', { body: req.body });
       return responseHelper.serverError(res, 'An unexpected error occurred');
     }
+  },
+
+  getAllUsers: async (req, res) => {
+    try {
+      const {
+        accountId,
+        search,
+        userRole,
+        userType,
+        status,
+        page,
+        limit
+      } = req.query;
+
+      const filters = {
+        accountId,
+        search,
+        userRole,
+        userType,
+        status,
+        page: parseInt(page) || 1,
+        limit: parseInt(limit) || 10
+      };
+
+      const result = await userService.getAllUsers(filters);
+      return responseHelper.success(res, result, 'Users fetched successfully');
+    } catch (err) {
+      if (err.statusCode) {
+        return responseHelper.error(res, err.message, err.statusCode, err.details);
+      }
+      
+      errorHelper.logError(err, 'UserController.getAllUsers', { query: req.query });
+      return responseHelper.serverError(res, 'An unexpected error occurred');
+    }
   }
 };

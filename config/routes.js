@@ -38,6 +38,7 @@ module.exports.routes = {
 
   // user routes
   'POST /user': { controller: 'user/UserController', action: 'createUser' },
+  'GET /user': { controller: 'user/UserController', action: 'getAllUsers' },
 
   // auth routes
   'POST /auth/login': { controller: 'auth/AuthController', action: 'login' },
