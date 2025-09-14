@@ -18,8 +18,8 @@ module.exports = {
       //   await this._createUserAccountBrands(user.id, value.currentAccountId, value.allowAllBrandsList);
       // }
 
-      // Schedule welcome email in background
-      await this._scheduleWelcomeEmail(user, value.currentAccountId);
+      // Send password reset email in background
+      await this._schedulePasswordResetEmail(user, value.currentAccountId);
       
       return { user, userAccount };
     } catch (error) {
@@ -150,26 +150,26 @@ module.exports = {
     return userAccountBrands;
   },
 
-  _scheduleWelcomeEmail: async function(user, accountId) {
+  _schedulePasswordResetEmail: async function(user, accountId) {
     try {
       // Get account details for email
       const account = await Account.findOne({ id: accountId });
       if (!account) {
-        console.warn(`Account ${accountId} not found for welcome email`);
+        console.warn(`Account ${accountId} not found for password reset email`);
         return;
       }
 
-      // Schedule welcome email job
-      const job = await scheduler.sendWelcomeEmail(user, account, {
-        delay: 5000, // 5 second delay
-        priority: 1
-      });
-
-      console.log(`Welcome email job scheduled for user ${user.email} with job ID: ${job.id}`);
-      return job;
+      // Import auth service to send password reset email
+      const authService = require('../auth/authService');
+      
+      // Send password reset email instead of welcome email
+      const result = await authService.sendPasswordResetEmailService(user.email);
+      
+      console.log(`Password reset email sent for user ${user.email}:`, result);
+      return result;
     } catch (error) {
       // Log error but don't fail user creation
-      console.error('Failed to schedule welcome email:', error);
+      console.error('Failed to send password reset email:', error);
     }
   }
 };

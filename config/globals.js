@@ -49,4 +49,12 @@ module.exports.globals = {
 
   sails: true,
 
+  /****************************************************************************
+  *                                                                           *
+  * JWT utility for token generation and verification                         *
+  *                                                                           *
+  ****************************************************************************/
+
+  jwt: require('jsonwebtoken'),
+
 };
