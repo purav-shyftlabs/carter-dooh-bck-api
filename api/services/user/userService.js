@@ -201,10 +201,6 @@ module.exports = {
         firstName: value.firstName,
         lastName: value.lastName,
         email: value.email,
-        auth0Id: value.auth0Id,
-        authentikId: value.authentikId,
-        authTokens: value.authTokens,
-        apiKey: value.apiKey
       }).fetch();
     }
     
@@ -251,13 +247,7 @@ module.exports = {
       userType: value.userType,
       roleType: value.roleType,
       allowAllBrands: value.allowAllBrands,
-      allowAllBrandsList: value.allowAllBrandsList,
-      isFirstTimeLogin: value.isFirstTimeLogin,
-      lastLoginTimestamp: value.lastLoginTimestamp,
-      firstLoginTimestamp: value.firstLoginTimestamp,
-      useCustomBranding: value.useCustomBranding,
-      acceptedTermsAndConditions: value.acceptedTermsAndConditions,
-      lastReadReleaseNotesVersion: value.lastReadReleaseNotesVersion
+      allowAllBrandsList: value.allowAllBrandsList
     }).fetch();
   },
 
