@@ -29,16 +29,40 @@ module.exports.http = {
     *                                                                          *
     ***************************************************************************/
 
-    // order: [
-    //   'cookieParser',
-    //   'session',
-    //   'bodyParser',
-    //   'compress',
-    //   'poweredBy',
-    //   'router',
-    //   'www',
-    //   'favicon',
-    // ],
+    order: [
+      'cookieParser',
+      'session',
+      'bodyParser',
+      'compress',
+      'poweredBy',
+      'router',
+      'www',
+      'favicon',
+      'cors'
+    ],
+
+    /***************************************************************************
+    *                                                                          *
+    * Custom CORS middleware to handle cross-origin requests                   *
+    *                                                                          *
+    ***************************************************************************/
+    cors: function(req, res, next) {
+      console.log('=== Incoming Request ===', req.method, req.url);
+    
+      res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin, X-HTTP-Method-Override');
+      res.header('Access-Control-Allow-Credentials', 'true');
+    
+      // Disable CSP completely
+      res.header('Content-Security-Policy', '');
+    
+      if (req.method === 'OPTIONS') {
+        return res.sendStatus(200);
+      }
+    
+      return next();
+    },
 
 
     /***************************************************************************

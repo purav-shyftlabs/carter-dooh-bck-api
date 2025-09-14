@@ -102,13 +102,13 @@ module.exports = {
       }
 
       // Verify user's current account matches token
-      if (user.currentAccountId !== decoded.accountId) {
-        throw errorHelper.createError(
-          'Invalid token for current account',
-          'INVALID_TOKEN_ACCOUNT',
-          400
-        );
-      }
+      // if (user.currentAccountId !== decoded.accountId) {
+      //   throw errorHelper.createError(
+      //     'Invalid token for current account',
+      //     'INVALID_TOKEN_ACCOUNT',
+      //     400
+      //   );
+      // }
 
       // Verify email matches
       if (user.email !== decoded.email) {
@@ -325,13 +325,14 @@ module.exports = {
       });
 
       return {
-        accountId: user.currentAccountId,
-        email: user.email,
-        id: user.id,
-        role: userAccount.userType,
-        status: userAccount.status,
-        username: user.name || `${user.firstName} ${user.lastName}`.trim(),
-        accounts: accounts,
+        // accountId: user.currentAccountId,
+        // email: user.email,
+        // id: user.id,
+        // role: userAccount.userType,
+        // status: userAccount.status,
+        // username: user.name || `${user.firstName} ${user.lastName}`.trim(),
+        // accounts: accounts,
+        __typename:"AuthenticatedUser",
         token: jwtToken
       };
     } catch (error) {

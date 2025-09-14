@@ -32,8 +32,9 @@ module.exports.security = {
     allRoutes: true,
     allowOrigins: '*',
     allowCredentials: false,
-    allowRequestMethods: 'GET, POST, PUT, DELETE, OPTIONS, HEAD',
-    allowRequestHeaders: 'content-type, authorization, x-requested-with, utcoffset'
+    allowRequestMethods: 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD',
+    allowRequestHeaders: 'Content-Type, Authorization, Accept, X-Requested-With, Origin, X-HTTP-Method-Override',
+    allowResponseHeaders: 'Content-Type, Authorization, Accept, X-Requested-With, Origin, X-HTTP-Method-Override'
   },
 
 
@@ -52,5 +53,14 @@ module.exports.security = {
   ****************************************************************************/
 
   // csrf: false
+
+  /****************************************************************************
+  *                                                                           *
+  * Content Security Policy (CSP)                                            *
+  *                                                                           *
+  ****************************************************************************/
+
+  // Disable CSP for development
+  csp: false
 
 };

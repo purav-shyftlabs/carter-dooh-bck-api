@@ -42,6 +42,19 @@ emailQueue.process('sendWelcomeEmail', async (job) => {
   }
 });
 
+// Process password reset email jobs
+emailQueue.process('sendPasswordResetEmail', async (job) => {
+  const { user, account, resetToken } = job.data;
+  
+  try {
+    await mailHelper.sendPasswordResetEmail(user, account, resetToken);
+    console.log(`Password reset email sent successfully to ${user.email}`);
+  } catch (error) {
+    console.error(`Failed to send password reset email to ${user.email}:`, error);
+    throw error;
+  }
+});
+
 // Process other email types
 emailQueue.process('sendNotificationEmail', async (job) => {
   const { user, subject, template, data } = job.data;
@@ -78,6 +91,21 @@ const scheduler = {
    */
   sendWelcomeEmail: (user, account, options = {}) => {
     return emailQueue.add('sendWelcomeEmail', { user, account }, {
+      delay: options.delay || 0,
+      priority: options.priority || 0,
+      ...options
+    });
+  },
+
+  /**
+   * Add password reset email job to queue
+   * @param {Object} user - User object
+   * @param {Object} account - Account object
+   * @param {String} resetToken - JWT reset token
+   * @param {Object} options - Job options
+   */
+  sendPasswordResetEmail: (user, account, resetToken, options = {}) => {
+    return emailQueue.add('sendPasswordResetEmail', { user, account, resetToken }, {
       delay: options.delay || 0,
       priority: options.priority || 0,
       ...options

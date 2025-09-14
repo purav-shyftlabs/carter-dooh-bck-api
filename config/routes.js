@@ -32,6 +32,9 @@ module.exports.routes = {
   * not match any of those, it is matched against static assets.             *
   *                                                                          *
   ***************************************************************************/
+  'OPTIONS /*': { action: false, cors: true },
+  'OPTIONS /user': { action: false, cors: true },
+  'OPTIONS /user/profile': { action: false, cors: true },
 
   // account routes
   'POST /account': { controller: 'account/AccountController', action: 'createAccount' },
@@ -39,11 +42,18 @@ module.exports.routes = {
   // user routes
   'POST /user': { controller: 'user/UserController', action: 'createUser' },
   'GET /user': { controller: 'user/UserController', action: 'getAllUsers' },
+  'GET /user/profile': { controller: 'user/UserController', action: 'getUserById' },
+  'PATCH /user/:userId': { controller: 'user/UserController', action: 'editUser' },
 
   // auth routes
   'POST /auth/login': { controller: 'auth/AuthController', action: 'login' },
   'POST /auth/forgot-password': { controller: 'auth/AuthController', action: 'forgotPassword' },
   'POST /auth/reset-password': { controller: 'auth/AuthController', action: 'resetPassword' },
   'GET /auth/verify-reset-token/:token': { controller: 'auth/AuthController', action: 'verifyResetToken' },
+
+  // permission routes
+  'GET /users/:userId/permissions': { controller: 'permission/PermissionController', action: 'getPermissionsByUserId' },
+  'GET /users/me': { controller: 'user/UserController', action: 'getUserByIdToken' },
+  'GET /users/:userId': { controller: 'user/UserController', action: 'getUserById' },
 
 };

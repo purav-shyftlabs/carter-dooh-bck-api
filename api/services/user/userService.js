@@ -1,26 +1,209 @@
 const errorHelper = require('../../utils/errorHelper');
 const utilityHelper = require('../../utils/utilityHelper');
 const scheduler = require('../../utils/scheduler');
+const userHelper = require('./helper');
+
+// SQL Template references for better organization
+const sqlTemplates = sails.config.globals.sqlTemplates;
+const buildQuery = sails.config.globals.buildQuery;
 
 module.exports = {
+  getUserById: async function(userId) {
+    try {
+      // Get user details
+      const userWhereClause = buildQuery.buildWhereClause({ id: userId });
+      const userQuery = sqlTemplates.select.findOne('user', userWhereClause);
+      const userValues = buildQuery.extractValues({ id: userId });
+      
+      const userResult = await sails.sendNativeQuery(userQuery, userValues);
+      if (!userResult.rows || userResult.rows.length === 0) {
+        throw errorHelper.createError('User not found', 'USER_NOT_FOUND', 404);
+      }
+      
+      const user = userResult.rows[0];
+      
+      // Get user account details for the current account
+      const userAccountWhereClause = buildQuery.buildWhereClause({ 
+        user_id: userId, 
+        account_id: user.current_account_id 
+      });
+      const userAccountQuery = sqlTemplates.select.findOne('user_account', userAccountWhereClause);
+      const userAccountValues = buildQuery.extractValues({ 
+        user_id: userId, 
+        account_id: user.current_account_id 
+      });
+      
+      const userAccountResult = await sails.sendNativeQuery(userAccountQuery, userAccountValues);
+      if (!userAccountResult.rows || userAccountResult.rows.length === 0) {
+        throw errorHelper.createError('User account not found', 'USER_ACCOUNT_NOT_FOUND', 404);
+      }
+      
+      const userAccount = userAccountResult.rows[0];
+      
+      // Get user permissions for this account
+      const permissionsWhereClause = buildQuery.buildWhereClause({ 
+        user_id: userId, 
+        account_id: userAccount.account_id 
+      });
+      const permissionsQuery = sqlTemplates.select.findAll('user_permission', permissionsWhereClause);
+      const permissionsValues = buildQuery.extractValues({ 
+        user_id: userId, 
+        account_id: userAccount.account_id 
+      });
+      
+      const permissionsResult = await sails.sendNativeQuery(permissionsQuery, permissionsValues);
+      const permissions = permissionsResult.rows.map(perm => ({
+        permissionType: perm.permission_type,
+        accessLevel: perm.access_level
+      }));
+      
+      // Format response according to the specified structure
+      const formattedUser = {
+        id: user.id.toString(),
+        accountId: userAccount.account_id.toString(),
+        name: user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        roleType: userAccount.role_type,
+        userType: userAccount.user_type,
+        timeZoneName: userAccount.timezone_name,
+        email: user.email,
+        isFirstTimeLogin: userAccount.is_first_time_login || false,
+        lastLoginTimestamp: userAccount.last_login_timestamp ? userAccount.last_login_timestamp.toISOString() : null,
+        firstLoginTimestamp: userAccount.first_login_timestamp ? userAccount.first_login_timestamp.toISOString() : null,
+        acceptedTermsAndConditions: userAccount.accepted_terms_and_conditions || false,
+        allowAllAdvertisers: userAccount.allow_all_brands || false,
+        lastReadReleaseNotesVersion: userAccount.last_read_release_notes_version || null,
+        permissions: permissions
+      };
+      
+      return formattedUser;
+    } catch (error) {
+      console.error('Get user by ID error:', error);
+      throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'fetch', 'User');
+    }
+  },
+
+  editUser: async function(userId, updateData) {
+    try {
+      console.log('=== editUser Service ===');
+      console.log('User ID:', userId);
+      console.log('Update Data:', updateData);
+
+      // Validate that user exists
+      const userWhereClause = buildQuery.buildWhereClause({ id: userId });
+      const userQuery = sqlTemplates.select.findOne('user', userWhereClause);
+      const userValues = buildQuery.extractValues({ id: userId });
+      
+      const userResult = await sails.sendNativeQuery(userQuery, userValues);
+      if (!userResult.rows || userResult.rows.length === 0) {
+        throw errorHelper.createError('User not found', 'USER_NOT_FOUND', 404);
+      }
+      
+      const user = userResult.rows[0];
+      console.log('Found user:', user);
+
+      // Get user account details for the current account
+      const userAccountWhereClause = buildQuery.buildWhereClause({ 
+        user_id: userId, 
+        account_id: user.current_account_id 
+      });
+      const userAccountQuery = sqlTemplates.select.findOne('user_account', userAccountWhereClause);
+      const userAccountValues = buildQuery.extractValues({ 
+        user_id: userId, 
+        account_id: user.current_account_id 
+      });
+      
+      const userAccountResult = await sails.sendNativeQuery(userAccountQuery, userAccountValues);
+      if (!userAccountResult.rows || userAccountResult.rows.length === 0) {
+        throw errorHelper.createError('User account not found', 'USER_ACCOUNT_NOT_FOUND', 404);
+      }
+      
+      const userAccount = userAccountResult.rows[0];
+      console.log('Found user account:', userAccount);
+
+      // Prepare update data for user table
+      const userUpdateData = {};
+      const userAccountUpdateData = {};
+
+      // Map update fields to database columns
+      if (updateData.name !== undefined) userUpdateData.name = updateData.name;
+      if (updateData.firstName !== undefined) userUpdateData.first_name = updateData.firstName;
+      if (updateData.lastName !== undefined) userUpdateData.last_name = updateData.lastName;
+      if (updateData.email !== undefined) userUpdateData.email = updateData.email;
+      if (updateData.phone !== undefined) userUpdateData.phone = updateData.phone;
+
+      // UserAccount fields
+      if (updateData.roleType !== undefined) userAccountUpdateData.role_type = updateData.roleType;
+      if (updateData.userType !== undefined) userAccountUpdateData.user_type = updateData.userType;
+      if (updateData.timeZoneName !== undefined) userAccountUpdateData.timezone_name = updateData.timeZoneName;
+      if (updateData.isFirstTimeLogin !== undefined) userAccountUpdateData.is_first_time_login = updateData.isFirstTimeLogin;
+      if (updateData.acceptedTermsAndConditions !== undefined) userAccountUpdateData.accepted_terms_and_conditions = updateData.acceptedTermsAndConditions;
+      if (updateData.allowAllAdvertisers !== undefined) userAccountUpdateData.allow_all_brands = updateData.allowAllAdvertisers;
+      if (updateData.useCustomBranding !== undefined) userAccountUpdateData.use_custom_branding = updateData.useCustomBranding;
+      if (updateData.lastReadReleaseNotesVersion !== undefined) userAccountUpdateData.last_read_release_notes_version = updateData.lastReadReleaseNotesVersion;
+
+      // Update user table if there are changes
+      if (Object.keys(userUpdateData).length > 0) {
+        userUpdateData.updated_at = new Date();
+        const userUpdateWhereClause = buildQuery.buildWhereClause({ id: userId });
+        const userUpdateQuery = sqlTemplates.update('user', userUpdateData, userUpdateWhereClause);
+        const userUpdateValues = buildQuery.extractValues({ ...userUpdateData, id: userId });
+        
+        console.log('Updating user with query:', userUpdateQuery);
+        console.log('User update values:', userUpdateValues);
+        
+        await sails.sendNativeQuery(userUpdateQuery, userUpdateValues);
+        console.log('User table updated successfully');
+      }
+
+      // Update user_account table if there are changes
+      if (Object.keys(userAccountUpdateData).length > 0) {
+        userAccountUpdateData.updated_at = new Date();
+        const userAccountUpdateWhereClause = buildQuery.buildWhereClause({ 
+          user_id: userId, 
+          account_id: user.current_account_id 
+        });
+        const userAccountUpdateQuery = sqlTemplates.update('user_account', userAccountUpdateData, userAccountUpdateWhereClause);
+        const userAccountUpdateValues = buildQuery.extractValues({ 
+          ...userAccountUpdateData, 
+          user_id: userId, 
+          account_id: user.current_account_id 
+        });
+        
+        console.log('Updating user_account with query:', userAccountUpdateQuery);
+        console.log('User account update values:', userAccountUpdateValues);
+        
+        await sails.sendNativeQuery(userAccountUpdateQuery, userAccountUpdateValues);
+        console.log('User account table updated successfully');
+      }
+
+      // Get updated user data
+      const updatedUser = await this.getUserById(userId);
+      console.log('Updated user data:', updatedUser);
+
+      return updatedUser;
+    } catch (error) {
+      console.error('Edit user error:', error);
+      throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'update', 'User');
+    }
+  },
   createUser: async function (value) {
     try {
-      await this._validateAccount(value.currentAccountId);
-      this._validateBrandsConfiguration(value);
+      await userHelper.validateAccount(value.currentAccountId);
+      userHelper.validateBrandsConfiguration(value);
           
-      const user = await this._findOrCreateUser(value);
-      await this._validateUserAccountUniqueness(user.id, value.currentAccountId);
+      const user = await userHelper.findOrCreateUser(value);
+      await userHelper.validateUserAccountUniqueness(user.id, value.currentAccountId);
 
-      const userAccount = await this._createUserAccount(user.id, value);
-      await this._validatePermissions(user.id, value.currentAccountId, value.permissions);
+      const userAccount = await userHelper.createUserAccount(user.id, value);
+      await userHelper.validatePermissions(user.id, value.currentAccountId, value.permissions);
 
       // Create UserAccountBrand entries if allowAllBrandsList is provided
       // if (value.allowAllBrandsList && value.allowAllBrandsList.length > 0) {
-      //   await this._createUserAccountBrands(user.id, value.currentAccountId, value.allowAllBrandsList);
+      //   await userHelper.createUserAccountBrands(user.id, value.currentAccountId, value.allowAllBrandsList);
       // }
 
       // Send password reset email in background
-      await this._schedulePasswordResetEmail(user, value.currentAccountId);
+      await userHelper.schedulePasswordResetEmail(user, value.currentAccountId);
       
       return { user, userAccount };
     } catch (error) {
@@ -51,46 +234,70 @@ module.exports = {
         );
       }
 
-      // Build UserAccount query - start from UserAccount table
-      let userAccountQuery = { accountId: accountId };
+      // Build UserAccount query conditions
+      let userAccountConditions = { account_id: accountId };
       
       // Apply filters directly on UserAccount
       if (userRole) {
-        userAccountQuery.roleType = userRole;
+        userAccountConditions.role_type = userRole;
       }
       if (userType) {
-        userAccountQuery.userType = userType;
+        userAccountConditions.user_type = userType;
       }
       if (status) {
-        userAccountQuery.status = status;
+        userAccountConditions.status = status;
       }
 
-      // Get user accounts with pagination
-      const userAccounts = await UserAccount.find(userAccountQuery)
-        .skip(skip)
-        .limit(limitNum)
-        .sort('id DESC');
+      // Build WHERE clause and values for UserAccount query
+      const userAccountWhereClause = buildQuery.buildWhereClause(userAccountConditions);
+      const userAccountValues = buildQuery.extractValues(userAccountConditions);
+
+      // Get user accounts with pagination using SQL
+      const userAccountQuery = sqlTemplates.select.findAll(
+        'user_account', 
+        userAccountWhereClause, 
+        'id DESC', 
+        `${limitNum} OFFSET ${skip}`
+      );
+      const userAccountsResult = await sails.sendNativeQuery(userAccountQuery, userAccountValues);
+      const userAccounts = userAccountsResult.rows;
 
       // Get total count for pagination
-      const totalUserAccounts = await UserAccount.count(userAccountQuery);
+      const countQuery = sqlTemplates.select.count('user_account', userAccountWhereClause);
+      const countResult = await sails.sendNativeQuery(countQuery, userAccountValues);
+      const totalUserAccounts = parseInt(countResult.rows[0].count);
 
       // Extract user IDs from user accounts
-      const userIds = userAccounts.map(ua => ua.userId);
+      const userIds = userAccounts.map(ua => ua.user_id);
 
       // Get users based on the user IDs from UserAccount
-      let userQuery = { id: userIds };
+      let userConditions = { id: userIds };
+      let userWhereClause = buildQuery.buildWhereClause(userConditions);
+      let userValues = buildQuery.extractValues(userConditions);
 
       // Apply search filter on User table
       if (search) {
-        userQuery.or = [
-          { name: { contains: search } },
-          { email: { contains: search } },
-          { firstName: { contains: search } },
-          { lastName: { contains: search } }
+        // For search, we need to use OR conditions with LIKE
+        const searchConditions = [
+          `name ILIKE $${userValues.length + 1}`,
+          `email ILIKE $${userValues.length + 2}`,
+          `first_name ILIKE $${userValues.length + 3}`,
+          `last_name ILIKE $${userValues.length + 4}`
         ];
+        
+        const searchPattern = `%${search}%`;
+        userValues.push(searchPattern, searchPattern, searchPattern, searchPattern);
+        
+        if (userWhereClause) {
+          userWhereClause += ` AND (${searchConditions.join(' OR ')})`;
+        } else {
+          userWhereClause = `(${searchConditions.join(' OR ')})`;
+        }
       }
 
-      const users = await User.find(userQuery);
+      const usersQuery = sqlTemplates.select.findAll('user', userWhereClause);
+      const usersResult = await sails.sendNativeQuery(usersQuery, userValues);
+      const users = usersResult.rows;
       
       // Create user map for quick lookup
       const userMap = {};
@@ -101,22 +308,22 @@ module.exports = {
       // Create user account map for quick lookup
       const userAccountMap = {};
       userAccounts.forEach(ua => {
-        userAccountMap[ua.userId] = ua;
+        userAccountMap[ua.user_id] = ua;
       });
 
       // Filter users based on search criteria
       let filteredUserAccounts = userAccounts;
       if (search) {
         filteredUserAccounts = userAccounts.filter(ua => {
-          const user = userMap[ua.userId];
+          const user = userMap[ua.user_id];
           if (!user) return false;
           
           const searchLower = search.toLowerCase();
           return (
             (user.name && user.name.toLowerCase().includes(searchLower)) ||
             (user.email && user.email.toLowerCase().includes(searchLower)) ||
-            (user.firstName && user.firstName.toLowerCase().includes(searchLower)) ||
-            (user.lastName && user.lastName.toLowerCase().includes(searchLower))
+            (user.first_name && user.first_name.toLowerCase().includes(searchLower)) ||
+            (user.last_name && user.last_name.toLowerCase().includes(searchLower))
           );
         });
       }
@@ -134,22 +341,22 @@ module.exports = {
 
       // Format response with required fields
       const formattedUsers = finalUserAccounts.map(userAccount => {
-        const user = userMap[userAccount.userId];
+        const user = userMap[userAccount.user_id];
         if (!user) {
           return {
-            id: userAccount.userId,
+            id: userAccount.user_id,
             name: 'User not found',
             email: 'N/A',
-            role: userAccount.userType,
+            role: userAccount.user_type,
             status: userAccount.status
           };
         }
         
         return {
           id: user.id,
-          name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          name: user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
           email: user.email,
-          role: userAccount.userType,
+          role: userAccount.user_type,
           status: userAccount.status
         };
       });
@@ -161,142 +368,6 @@ module.exports = {
     } catch (error) {
       console.error('Get all users error:', error);
       throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'fetch', 'Users');
-    }
-  },
-
-  _validateAccount: async function(accountId) {
-    const account = await Account.findOne({ id: accountId });
-    if (!account) {
-      throw errorHelper.createError('Account not found', 'ACCOUNT_NOT_FOUND', 404);
-    }
-  },
-
-  _validateBrandsConfiguration: function(value) {
-    const { allowAllBrands, allowAllBrandsList } = value;
-    
-    if (allowAllBrands === true && allowAllBrandsList?.length > 0) {
-      throw errorHelper.createError(
-        'allowAllBrandsList should be empty when allowAllBrands is true',
-        'INVALID_BRANDS_CONFIG', 
-        400
-      );
-    }
-    
-    if (allowAllBrands === false && (!allowAllBrandsList || allowAllBrandsList.length === 0)) {
-      throw errorHelper.createError(
-        'allowAllBrandsList is required when allowAllBrands is false',
-        'MISSING_BRANDS_LIST', 
-        400
-      );
-    }
-  },
-
-  _findOrCreateUser: async function(value) {
-    let user = await User.findOne({ email: value.email });
-    
-    if (!user) {
-      user = await User.create({
-        currentAccountId: value.currentAccountId,
-        name: value.name,
-        firstName: value.firstName,
-        lastName: value.lastName,
-        email: value.email,
-      }).fetch();
-    }
-    
-    return user;
-  },
-
-  _validateUserAccountUniqueness: async function(userId, accountId) {
-    const existingUserAccount = await UserAccount.findOne({ userId, accountId });
-    if (existingUserAccount) {
-      throw errorHelper.createError(
-        'User with this email already exists in the account', 
-        'USER_EXISTS', 
-        409
-      );
-    }
-  },
-
-  _validatePermissions: async function(userId, accountId, permissions = []) {
-    if (!Array.isArray(permissions)) return;
-
-    for (const perm of permissions) {
-      if (!perm.permissionType || !perm.accessLevel) {
-        throw errorHelper.createError(
-          'Each permission must include permissionType and accessLevel',
-          'INVALID_PERMISSION',
-          400
-        );
-      }
-
-      await UserPermission.create({
-        userId,
-        accountId,
-        permissionType: perm.permissionType,
-        accessLevel: perm.accessLevel
-      });
-    }
-  },
-
-  _createUserAccount: async function(userId, value) {
-    return await UserAccount.create({
-      userId,
-      accountId: value.currentAccountId,
-      timezoneName: value.timezoneName,
-      userType: value.userType,
-      roleType: value.roleType,
-      allowAllBrands: value.allowAllBrands,
-      allowAllBrandsList: value.allowAllBrandsList
-    }).fetch();
-  },
-
-  _createUserAccountBrands: async function(userId, accountId, brandIds) {
-    const userAccountBrands = [];
-    
-    for (const brandId of brandIds) {
-      // Validate that the brand exists
-      const brand = await Brand.findOne({ id: brandId });
-      if (!brand) {
-        throw errorHelper.createError(
-          `Brand with ID ${brandId} not found`,
-          'BRAND_NOT_FOUND',
-          404
-        );
-      }
-
-      // Create UserAccountBrand entry
-      const userAccountBrand = await UserAccountBrand.create({
-        brandId: brandId,
-        userBrandAccessId: userId // Using userId as userBrandAccessId for now
-      }).fetch();
-      
-      userAccountBrands.push(userAccountBrand);
-    }
-    
-    return userAccountBrands;
-  },
-
-  _schedulePasswordResetEmail: async function(user, accountId) {
-    try {
-      // Get account details for email
-      const account = await Account.findOne({ id: accountId });
-      if (!account) {
-        console.warn(`Account ${accountId} not found for password reset email`);
-        return;
-      }
-
-      // Import auth service to send password reset email
-      const authService = require('../auth/authService');
-      
-      // Send password reset email instead of welcome email
-      const result = await authService.sendPasswordResetEmailService(user.email);
-      
-      console.log(`Password reset email sent for user ${user.email}:`, result);
-      return result;
-    } catch (error) {
-      // Log error but don't fail user creation
-      console.error('Failed to send password reset email:', error);
     }
   }
 };
