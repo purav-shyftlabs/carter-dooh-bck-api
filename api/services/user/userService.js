@@ -1,4 +1,5 @@
 const errorHelper = require('../../utils/errorHelper');
+const scheduler = require('../../utils/scheduler');
 
 module.exports = {
   createUser: async function (value) {
@@ -8,14 +9,17 @@ module.exports = {
           
       const user = await this._findOrCreateUser(value);
       await this._validateUserAccountUniqueness(user.id, value.currentAccountId);
-      await this._validatePermissions(user.id, value.currentAccountId, value.permissions);
 
       const userAccount = await this._createUserAccount(user.id, value);
-      
+      await this._validatePermissions(user.id, value.currentAccountId, value.permissions);
+
       // Create UserAccountBrand entries if allowAllBrandsList is provided
-      if (value.allowAllBrandsList && value.allowAllBrandsList.length > 0) {
-        await this._createUserAccountBrands(user.id, value.currentAccountId, value.allowAllBrandsList);
-      }
+      // if (value.allowAllBrandsList && value.allowAllBrandsList.length > 0) {
+      //   await this._createUserAccountBrands(user.id, value.currentAccountId, value.allowAllBrandsList);
+      // }
+
+      // Schedule welcome email in background
+      await this._scheduleWelcomeEmail(user, value.currentAccountId);
       
       return { user, userAccount };
     } catch (error) {
@@ -144,5 +148,28 @@ module.exports = {
     }
     
     return userAccountBrands;
+  },
+
+  _scheduleWelcomeEmail: async function(user, accountId) {
+    try {
+      // Get account details for email
+      const account = await Account.findOne({ id: accountId });
+      if (!account) {
+        console.warn(`Account ${accountId} not found for welcome email`);
+        return;
+      }
+
+      // Schedule welcome email job
+      const job = await scheduler.sendWelcomeEmail(user, account, {
+        delay: 5000, // 5 second delay
+        priority: 1
+      });
+
+      console.log(`Welcome email job scheduled for user ${user.email} with job ID: ${job.id}`);
+      return job;
+    } catch (error) {
+      // Log error but don't fail user creation
+      console.error('Failed to schedule welcome email:', error);
+    }
   }
 };
