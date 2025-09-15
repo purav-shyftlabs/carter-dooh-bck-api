@@ -186,6 +186,7 @@ module.exports = {
       throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'update', 'User');
     }
   },
+  
   createUser: async function (value) {
     try {
       await userHelper.validateAccount(value.currentAccountId);
@@ -210,6 +211,7 @@ module.exports = {
       throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'create', 'User');
     }
   },
+
   getAllUsers: async function(filters) {
     try {
       const {

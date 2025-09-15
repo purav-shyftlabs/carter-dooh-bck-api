@@ -19,4 +19,39 @@ module.exports.policies = {
 
   // '*': true,
 
+  /***************************************************************************
+  *                                                                          *
+  * JWT Authentication Policies                                              *
+  *                                                                          *
+  ***************************************************************************/
+
+  // User Controller - All actions require JWT authentication
+  'user/UserController': {
+    '*': 'isAuthenticated'
+  },
+
+  // Permission Controller - All actions require JWT authentication
+  'permission/PermissionController': {
+    '*': 'isAuthenticated'
+  },
+
+  // Account Controller - All actions require JWT authentication
+  'account/AccountController': {
+    '*': 'isAuthenticated'
+  },
+
+  // Auth Controller - Only login and password reset don't require authentication
+  'auth/AuthController': {
+    'login': true,
+    'forgotPassword': true,
+    'resetPassword': true,
+    'verifyResetToken': true,
+    '*': 'isAuthenticated'
+  },
+
+  // App Controller - Public access
+  'app/AppController': {
+    '*': true
+  }
+
 };

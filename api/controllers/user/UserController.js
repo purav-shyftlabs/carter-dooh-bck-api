@@ -2,36 +2,27 @@ const { createUserSchema } = require('../../schema/User/UserSchema');
 const userService = require('../../services/user/userService');
 const responseHelper = require('../../utils/responseHelper');
 const errorHelper = require('../../utils/errorHelper');
-const jwt = require('jsonwebtoken');
 const aclCheck = require('../../utils/aclCheck');
 const permissionService = require('../../services/permission/permissionService');
 const AccessLevel = require('../../enums/accessLevel');
 const PermissionType = require('../../enums/permissionType');
 const UserType = require('../../enums/userType');
+const tokenHelper = require('../../utils/tokenHelper');
 
 module.exports = {
   createUser: async (req, res) => {
     try {
       // Validate input
       const value = await createUserSchema.validateAsync(req.body);
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return responseHelper.error(res, 'Authorization header missing or invalid', 401);
-      }
-
-      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-      console.log('Token:', token);
-
-      // Verify and decode JWT token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
-      const userId_token = decoded.userId;
-      const accountId_token = decoded.accountId;
+      // Get user info from token (handled by policy)
+      const { userId, accountId } = req.user;
 
       // fetch user permission
-      const userPermission = await permissionService.getPermissionsByUserId(userId_token, accountId_token);
+      const userPermission = await permissionService.getPermissionsByUserId(userId, accountId);
       // find permission type in userPermission
       const permissionType = userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT);
-      const user = await userService.getUserById(userId_token);
+      const user = await userService.getUserById(userId);
+      
       if (!permissionType) {
         return responseHelper.error(res, 'Permission type not found', 401);
       }
@@ -41,10 +32,12 @@ module.exports = {
         permissionType.accessLevel, 
         AccessLevel.FULL_ACCESS
       );
+      
       // check is user is publisher
       if (user.userType != UserType.PUBLISHER) {
         return responseHelper.error(res, 'Advertiser cannot create users', 403);
       }
+      
       if (!hasAccess) {
         return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
       }
@@ -82,8 +75,36 @@ module.exports = {
       console.log('Query:', req.query);
       console.log('===========================');
 
+      // Get user info from token (handled by policy)
+      const { userId, accountId } = req.user;
+
+      // Get current user info
+      const currentUser = await userService.getUserById(userId);
+      if (!currentUser) {
+        return responseHelper.error(res, 'User not found', 404);
+      }
+
+      // Check user permissions for USER_MANAGEMENT
+      const userPermission = await permissionService.getPermissionsByUserId(userId, accountId);
+      const permissionType = userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT);
+      
+      if (!permissionType) {
+        return responseHelper.error(res, 'Permission type not found', 401);
+      }
+
+      // Check if user has VIEW_ACCESS or higher for USER_MANAGEMENT
+      const hasAccess = aclCheck.checkAcl(
+        permissionType.permissionType, 
+        permissionType.accessLevel, 
+        AccessLevel.VIEW_ACCESS
+      );
+
+      if (!hasAccess) {
+        return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
+      }
+
       const {
-        accountId,
+        accountId: queryAccountId,
         search,
         userRole,
         userType,
@@ -92,20 +113,39 @@ module.exports = {
         limit
       } = req.query;
 
+      // Apply user type filtering based on current user's type
+      let allowedUserTypes = [];
+      if (currentUser.userType === UserType.ADVERTISER) {
+        // Advertisers can only see other advertisers
+        allowedUserTypes = [UserType.ADVERTISER];
+      } else if (currentUser.userType === UserType.PUBLISHER) {
+        // Publishers can see both advertisers and publishers
+        allowedUserTypes = [UserType.ADVERTISER, UserType.PUBLISHER];
+      } else {
+        return responseHelper.error(res, 'Invalid user type', 403);
+      }
+
       const filters = {
-        accountId,
+        accountId: queryAccountId,
         search,
         userRole,
-        userType,
+        userType: userType || allowedUserTypes, // Use provided userType or default to allowed types
         status,
         page: parseInt(page) || 1,
         limit: parseInt(limit) || 10
       };
+
+      // If userType is specified in query, validate it's allowed for current user
+      if (userType && !allowedUserTypes.includes(userType)) {
+        return responseHelper.error(res, `You can only view ${allowedUserTypes.join(' and ')} users`, 403);
+      }
+
       console.log('filters', filters);
       const result = await userService.getAllUsers(filters);
       return responseHelper.success(res, result, 'Users fetched successfully');
     } catch (err) {
       console.error('getAllUsers Error:', err);
+
       if (err.statusCode) {
         errorHelper.logError(err, 'UserController.getAllUsers', { query: req.query });
         return responseHelper.error(res, err.message, err.statusCode, err.details);
@@ -114,28 +154,16 @@ module.exports = {
       return responseHelper.serverError(res, 'An unexpected error occurred');
     }
   },
+  
   getUserById: async (req, res) => {
     try {
       console.log('=== getUserById Request ===');
       console.log('Headers:', req.headers);
       console.log('===========================');
 
-      // Extract JWT token from Authorization header
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return responseHelper.error(res, 'Authorization header missing or invalid', 401);
-      }
-
-      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-      console.log('Token:', token);
-
-      // Verify and decode JWT token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
-      console.log('Decoded token:', decoded);
-
       const userId = req.params.userId;
       if (!userId) {
-        return responseHelper.error(res, 'User ID not found in token', 401);
+        return responseHelper.error(res, 'User ID is required', 400);
       }
 
       console.log('Fetching user with ID:', userId);
@@ -145,14 +173,6 @@ module.exports = {
       return responseHelper.success(res, result, 'User fetched successfully');
     } catch (err) {
       console.error('getUserById Error:', err);
-      
-      if (err.name === 'JsonWebTokenError') {
-        return responseHelper.error(res, 'Invalid token', 401);
-      }
-      
-      if (err.name === 'TokenExpiredError') {
-        return responseHelper.error(res, 'Token has expired', 401);
-      }
 
       if (err.statusCode) {
         return responseHelper.error(res, err.message, err.statusCode, err.details);
@@ -162,29 +182,15 @@ module.exports = {
       return responseHelper.serverError(res, 'An unexpected error occurred');
     }
   },
+
   getUserByIdToken: async (req, res) => {
     try {
-      console.log('=== getUserById Request ===');
+      console.log('=== getUserByIdToken Request ===');
       console.log('Headers:', req.headers);
       console.log('===========================');
 
-      // Extract JWT token from Authorization header
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return responseHelper.error(res, 'Authorization header missing or invalid', 401);
-      }
-
-      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-      console.log('Token:', token);
-
-      // Verify and decode JWT token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
-      console.log('Decoded token:', decoded);
-
-      const userId = decoded.userId;
-      if (!userId) {
-        return responseHelper.error(res, 'User ID not found in token', 401);
-      }
+      // Get user info from token (handled by policy)
+      const { userId } = req.user;
 
       console.log('Fetching user with ID:', userId);
       const result = await userService.getUserById(userId);
@@ -192,21 +198,13 @@ module.exports = {
 
       return responseHelper.success(res, result, 'User fetched successfully');
     } catch (err) {
-      console.error('getUserById Error:', err);
-      
-      if (err.name === 'JsonWebTokenError') {
-        return responseHelper.error(res, 'Invalid token', 401);
-      }
-      
-      if (err.name === 'TokenExpiredError') {
-        return responseHelper.error(res, 'Token has expired', 401);
-      }
+      console.error('getUserByIdToken Error:', err);
 
       if (err.statusCode) {
         return responseHelper.error(res, err.message, err.statusCode, err.details);
       }
 
-      errorHelper.logError(err, 'UserController.getUserById', { headers: req.headers });
+      errorHelper.logError(err, 'UserController.getUserByIdToken', { headers: req.headers });
       return responseHelper.serverError(res, 'An unexpected error occurred');
     }
   },
@@ -226,18 +224,27 @@ module.exports = {
         return responseHelper.error(res, 'User ID is required', 400);
       }
 
-      // Extract JWT token from Authorization header
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return responseHelper.error(res, 'Authorization header missing or invalid', 401);
+      // Get user info from token (handled by policy)
+      const { userId: currentUserId, accountId } = req.user;
+
+      // Check user permissions for USER_MANAGEMENT
+      const userPermission = await permissionService.getPermissionsByUserId(currentUserId, accountId);
+      const permissionType = userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT);
+      
+      if (!permissionType) {
+        return responseHelper.error(res, 'Permission type not found', 401);
       }
 
-      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-      console.log('Token:', token);
+      // Check if user has FULL_ACCESS for USER_MANAGEMENT to edit users
+      const hasAccess = aclCheck.checkAcl(
+        permissionType.permissionType, 
+        permissionType.accessLevel, 
+        AccessLevel.FULL_ACCESS
+      );
 
-      // Verify and decode JWT token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
-      console.log('Decoded token:', decoded);
+      if (!hasAccess) {
+        return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
+      }
 
       console.log('Editing user with ID:', userId);
       const result = await userService.editUser(userId, req.body);
@@ -246,14 +253,6 @@ module.exports = {
       return responseHelper.success(res, result, 'User updated successfully');
     } catch (err) {
       console.error('editUser Error:', err);
-      
-      if (err.name === 'JsonWebTokenError') {
-        return responseHelper.error(res, 'Invalid token', 401);
-      }
-      
-      if (err.name === 'TokenExpiredError') {
-        return responseHelper.error(res, 'Token has expired', 401);
-      }
 
       if (err.statusCode) {
         return responseHelper.error(res, err.message, err.statusCode, err.details);
