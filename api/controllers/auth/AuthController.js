@@ -127,16 +127,16 @@ module.exports = {
    */
   login: async function(req, res) {
     try {
-      const { username, password } = req.body;
+      const { email, password } = req.body;
       
-      if (!username || !password) {
+      if (!email || !password) {
         return res.badRequest({
           message: 'Email and password are required',
           code: 'MISSING_CREDENTIALS'
         });
       }
 
-      const result = await authService.authenticateUser(username, password);
+      const result = await authService.authenticateUser(email, password);
       
       return res.ok(result);
     } catch (error) {

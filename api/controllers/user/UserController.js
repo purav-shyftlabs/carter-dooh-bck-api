@@ -110,7 +110,9 @@ module.exports = {
         userType,
         status,
         page,
-        limit
+        limit,
+        sortBy,
+        sortType
       } = req.query;
 
       // Apply user type filtering based on current user's type
@@ -132,7 +134,9 @@ module.exports = {
         userType: userType || allowedUserTypes, // Use provided userType or default to allowed types
         status,
         page: parseInt(page) || 1,
-        limit: parseInt(limit) || 10
+        limit: parseInt(limit) || 10,
+        sortBy,
+        sortType
       };
 
       // If userType is specified in query, validate it's allowed for current user
@@ -154,7 +158,7 @@ module.exports = {
       return responseHelper.serverError(res, 'An unexpected error occurred');
     }
   },
-  
+
   getUserById: async (req, res) => {
     try {
       console.log('=== getUserById Request ===');

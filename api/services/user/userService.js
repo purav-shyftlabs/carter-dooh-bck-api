@@ -221,7 +221,9 @@ module.exports = {
         userType,
         status,
         page = 1,
-        limit = 10
+        limit = 10,
+        sortBy,
+        sortType
       } = filters;
 
       // Get pagination parameters
@@ -236,137 +238,158 @@ module.exports = {
         );
       }
 
-      // Build UserAccount query conditions
-      let userAccountConditions = { account_id: accountId };
-      
-      // Apply filters directly on UserAccount
+      // Build Waterline criteria for UserAccount
+      const userAccountWhere = { accountId: Number(accountId) };
+
       if (userRole) {
-        userAccountConditions.role_type = userRole;
+        userAccountWhere.roleType = String(userRole).toUpperCase();
       }
       if (userType) {
-        userAccountConditions.user_type = userType;
+        userAccountWhere.userType = String(userType).toUpperCase();
       }
       if (status) {
-        userAccountConditions.status = status;
+        userAccountWhere.active = status;
+      }
+      // Only apply status filter if the attribute exists on the model
+      if (status && UserAccount && UserAccount.attributes && UserAccount.attributes.status) {
+        userAccountWhere.active = status;
       }
 
-      // Build WHERE clause and values for UserAccount query
-      const userAccountWhereClause = buildQuery.buildWhereClause(userAccountConditions);
-      const userAccountValues = buildQuery.extractValues(userAccountConditions);
-
-      // Get user accounts with pagination using SQL
-      const userAccountQuery = sqlTemplates.select.findAll(
-        'user_account', 
-        userAccountWhereClause, 
-        'id DESC', 
-        `${limitNum} OFFSET ${skip}`
-      );
-      const userAccountsResult = await sails.sendNativeQuery(userAccountQuery, userAccountValues);
-      const userAccounts = userAccountsResult.rows;
-
-      // Get total count for pagination
-      const countQuery = sqlTemplates.select.count('user_account', userAccountWhereClause);
-      const countResult = await sails.sendNativeQuery(countQuery, userAccountValues);
-      const totalUserAccounts = parseInt(countResult.rows[0].count);
-
-      // Extract user IDs from user accounts
-      const userIds = userAccounts.map(ua => ua.user_id);
-
-      // Get users based on the user IDs from UserAccount
-      let userConditions = { id: userIds };
-      let userWhereClause = buildQuery.buildWhereClause(userConditions);
-      let userValues = buildQuery.extractValues(userConditions);
-
-      // Apply search filter on User table
-      if (search) {
-        // For search, we need to use OR conditions with LIKE
-        const searchConditions = [
-          `name ILIKE $${userValues.length + 1}`,
-          `email ILIKE $${userValues.length + 2}`,
-          `first_name ILIKE $${userValues.length + 3}`,
-          `last_name ILIKE $${userValues.length + 4}`
-        ];
-        
-        const searchPattern = `%${search}%`;
-        userValues.push(searchPattern, searchPattern, searchPattern, searchPattern);
-        
-        if (userWhereClause) {
-          userWhereClause += ` AND (${searchConditions.join(' OR ')})`;
-        } else {
-          userWhereClause = `(${searchConditions.join(' OR ')})`;
-        }
+      // Determine sorting from sortBy and sortType
+      let sortColumn = sortBy ? String(sortBy) : null;
+      let sortAsc = true; // default ascending
+      if (sortType !== undefined && sortType !== null) {
+        const st = String(sortType).toLowerCase();
+        if (st === '1' || st === 'asc' || st === 'ascending') sortAsc = true;
+        else if (st === '0' || st === 'desc' || st === 'descending') sortAsc = false;
       }
 
-      const usersQuery = sqlTemplates.select.findAll('user', userWhereClause);
-      const usersResult = await sails.sendNativeQuery(usersQuery, userValues);
-      const users = usersResult.rows;
-      
-      // Create user map for quick lookup
+      // Map incoming sort column names to model attributes
+      const userAccountColumns = new Set(Object.keys(UserAccount.attributes || {}));
+      const userColumns = new Set(Object.keys(User.attributes || {}));
+
+      // Normalize special cases
+      const normalizeColumn = (col) => {
+        if (!col) return null;
+        if (col === 'status') return 'active';
+        return col;
+      };
+      const normalizedSortColumn = normalizeColumn(sortColumn);
+      const isUserAccountSort = normalizedSortColumn && userAccountColumns.has(normalizedSortColumn);
+      const isUserSort = normalizedSortColumn && userColumns.has(normalizedSortColumn);
+
+      let userAccounts = [];
+      let totalUserAccounts = 0;
+
+      if (isUserAccountSort || !normalizedSortColumn) {
+        // Sort and paginate at DB level when sorting by UserAccount or when no valid sort provided
+        const dbSort = normalizedSortColumn
+          ? `${normalizedSortColumn} ${sortAsc ? 'ASC' : 'DESC'}`
+          : 'id DESC';
+        const [ua, total] = await Promise.all([
+          UserAccount.find({
+            where: userAccountWhere,
+            sort: dbSort,
+            limit: limitNum,
+            skip
+          }).meta({ makeLikeModifierCaseInsensitive: true }),
+          UserAccount.count(userAccountWhere)
+        ]);
+        userAccounts = ua;
+        totalUserAccounts = total;
+      } else if (isUserSort) {
+        // Fetch all matching user accounts (no pagination) to sort by user fields reliably
+        const [ua, total] = await Promise.all([
+          UserAccount.find({ where: userAccountWhere }).meta({ makeLikeModifierCaseInsensitive: true }),
+          UserAccount.count(userAccountWhere)
+        ]);
+        userAccounts = ua;
+        totalUserAccounts = total;
+      }
+
+      // Extract userIds from user accounts
+      const userIds = userAccounts.map(ua => ua.userId);
+
+      // Short-circuit if no user ids
+      if (userIds.length === 0) {
+        return utilityHelper.buildPaginationResponse([], 0, pageNum, limitNum);
+      }
+
+      // Fetch users for these userIds (search will be applied in JS for reliable case-insensitivity)
+      const users = await User.find({
+        where: { id: userIds },
+        select: ['id', 'name', 'firstName', 'lastName', 'email']
+      });
+
+      // Build lookup map for users
       const userMap = {};
-      users.forEach(user => {
-        userMap[user.id] = user;
+      users.forEach(u => {
+        userMap[u.id] = u;
       });
 
-      // Create user account map for quick lookup
-      const userAccountMap = {};
-      userAccounts.forEach(ua => {
-        userAccountMap[ua.user_id] = ua;
-      });
-
-      // Filter users based on search criteria
+      // Filter by search against user fields if needed (mimic original behavior)
       let filteredUserAccounts = userAccounts;
       if (search) {
+        const tokens = String(search).toLowerCase().split(/\s+/).filter(Boolean);
         filteredUserAccounts = userAccounts.filter(ua => {
-          const user = userMap[ua.user_id];
-          if (!user) return false;
-          
-          const searchLower = search.toLowerCase();
-          return (
-            (user.name && user.name.toLowerCase().includes(searchLower)) ||
-            (user.email && user.email.toLowerCase().includes(searchLower)) ||
-            (user.first_name && user.first_name.toLowerCase().includes(searchLower)) ||
-            (user.last_name && user.last_name.toLowerCase().includes(searchLower))
-          );
+          const u = userMap[ua.userId];
+          if (!u) return false;
+          const haystack = [u.name, u.email, u.firstName, u.lastName, u.id]
+            .filter(Boolean)
+            .join(' ')
+            .toLowerCase();
+          // Match all tokens (AND semantics) to support queries like "purav publisher"
+          return tokens.every(t => haystack.includes(t));
         });
       }
 
-      // If we have search filter, we need to recalculate pagination
-      let finalUserAccounts = filteredUserAccounts;
-      let finalTotal = totalUserAccounts;
-
-      if (search) {
-        // Re-paginate the filtered results
-        const paginatedResult = utilityHelper.paginate(filteredUserAccounts, pageNum, limitNum);
-        finalUserAccounts = paginatedResult.items;
-        finalTotal = paginatedResult.pagination.totalItems;
+      // Apply JS sorting if sorting by user fields
+      if (isUserSort && normalizedSortColumn) {
+        const col = normalizedSortColumn;
+        filteredUserAccounts.sort((a, b) => {
+          const ua = userMap[a.userId] || {};
+          const ub = userMap[b.userId] || {};
+          const va = (ua[col] ?? '').toString().toLowerCase();
+          const vb = (ub[col] ?? '').toString().toLowerCase();
+          if (va < vb) return sortAsc ? -1 : 1;
+          if (va > vb) return sortAsc ? 1 : -1;
+          return 0;
+        });
       }
 
-      // Format response with required fields
-      const formattedUsers = finalUserAccounts.map(userAccount => {
-        const user = userMap[userAccount.user_id];
-        if (!user) {
+      // Recompute pagination and totals when search or user-field sort is applied
+      let finalUserAccounts = filteredUserAccounts;
+      let finalTotal = totalUserAccounts;
+      if (search || isUserSort) {
+        const paginated = utilityHelper.paginate(filteredUserAccounts, pageNum, limitNum);
+        finalUserAccounts = paginated.items;
+        finalTotal = paginated.pagination.totalItems;
+      }
+
+      // Format response
+      const formattedUsers = finalUserAccounts.map(ua => {
+        const u = userMap[ua.userId];
+        if (!u) {
           return {
-            id: userAccount.user_id,
+            id: ua.userId,
             name: 'User not found',
             email: 'N/A',
-            role: userAccount.user_type,
-            status: userAccount.status
+            userType: ua.userType,
+            status: ua.status,
+            roleType: ua.roleType
           };
         }
-        
         return {
-          id: user.id,
-          name: user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-          email: user.email,
-          role: userAccount.user_type,
-          status: userAccount.status
+          id: u.id,
+          name: u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+          email: u.email,
+          userType: ua.userType,
+          status: ua.status,
+          roleType: ua.roleType,
         };
       });
 
-      // Build pagination response
-      const result = utilityHelper.buildPaginationResponse(formattedUsers, finalTotal, pageNum, limitNum);
-
-      return result;
+      return utilityHelper.buildPaginationResponse(formattedUsers, finalTotal, pageNum, limitNum);
     } catch (error) {
       console.error('Get all users error:', error);
       throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'fetch', 'Users');

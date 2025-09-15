@@ -1,6 +1,6 @@
 module.exports = {
-    ADMIN: 'admin',
-    SUPER_USER: 'super_user',
-    BASIC_USER: 'basic_user',
-    CUSTOM_USER: 'custom_user'
+    ADMIN: 'ADMIN',
+    SUPER_USER: 'SUPER_USER',
+    BASIC_USER: 'BASIC_USER',
+    CUSTOM_USER: 'CUSTOM_USER'
 };

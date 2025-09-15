@@ -1,5 +1,5 @@
 module.exports = {
-    API_USER: 'api_user',
-    PUBLISHER: 'publisher',
-    ADVERTISER: 'advertiser'
+    API_USER: 'API_USER',
+    PUBLISHER: 'PUBLISHER',
+    ADVERTISER: 'ADVERTISER'
 };
