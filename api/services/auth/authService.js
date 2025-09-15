@@ -10,10 +10,74 @@ const jwt = require('jsonwebtoken');
 
 module.exports = {
   /**
+   * Switch user's current account and return a refreshed JWT
+   * @param {number} userId - ID of the authenticated user
+   * @param {number} targetAccountId - Account ID to switch to
+   */
+  switchAccount: async function (userId, targetAccountId) {
+    try {
+      if (!userId || !targetAccountId) {
+        throw errorHelper.createError(
+          'User ID and target account ID are required',
+          'MISSING_REQUIRED_FIELDS',
+          400
+        );
+      }
+
+      const numericUserId = Number(userId);
+      const numericAccountId = Number(targetAccountId);
+
+      // Ensure user exists
+      const user = await User.findOne({ id: numericUserId });
+      if (!user) {
+        throw errorHelper.createError('User not found', 'USER_NOT_FOUND', 404);
+      }
+
+      // Ensure the user has membership in the target account
+      const membership = await UserAccount.findOne({ userId: numericUserId, accountId: numericAccountId });
+      if (!membership) {
+        throw errorHelper.createError(
+          'User does not belong to the specified account',
+          'USER_ACCOUNT_NOT_FOUND',
+          404
+        );
+      }
+
+      // Ensure the account exists
+      const account = await Account.findOne({ id: numericAccountId });
+      if (!account) {
+        throw errorHelper.createError('Account not found', 'ACCOUNT_NOT_FOUND', 404);
+      }
+
+      // Update user's current account
+      await User.updateOne({ id: numericUserId }).set({ currentAccountId: numericAccountId, updatedAt: new Date() });
+
+      // Generate JWT token (same structure as login)
+      const tokenPayload = {
+        userId: numericUserId,
+        selectedAccount: numericAccountId,
+        role: membership.userType,
+        email: user.email
+      };
+
+      const jwtToken = jwt.sign(tokenPayload, process.env.JWT_SECRET || 'default-secret', {
+        expiresIn: '24h'
+      });
+
+      return {
+        __typename: 'AuthenticatedUser',
+        token: jwtToken
+      };
+    } catch (error) {
+      console.error('Switch account error:', error);
+      throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'update', 'User current account');
+    }
+  },
+  /**
    * Send password reset email
    * @param {string} email - User email
    */
-  sendPasswordResetEmailService: async function(email) {
+  sendPasswordResetEmailService: async function (email) {
     try {
       // Find user by email
       const user = await User.findOne({ email: email.toLowerCase() });
@@ -23,11 +87,11 @@ module.exports = {
       }
 
       // Get user's current account
-      const userAccount = await UserAccount.findOne({ 
+      const userAccount = await UserAccount.findOne({
         userId: user.id,
-        accountId: user.currentAccountId 
+        accountId: user.currentAccountId
       });
-      
+
       if (!userAccount) {
         throw errorHelper.createError(
           'User account not found',
@@ -62,9 +126,9 @@ module.exports = {
       // Send password reset email
       await mailHelper.sendPasswordResetEmail(user, account, resetToken);
 
-      return { 
+      return {
         message: 'Password reset email sent successfully',
-        email: user.email 
+        email: user.email
       };
     } catch (error) {
       console.error('Send password reset email error:', error);
@@ -77,11 +141,11 @@ module.exports = {
    * @param {string} token - JWT reset token
    * @param {string} newPassword - New password
    */
-  resetPasswordWithToken: async function(token, newPassword) {
+  resetPasswordWithToken: async function (token, newPassword) {
     try {
       // Verify and decode the token
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
-      
+
       // Validate token type
       if (decoded.type !== 'password_reset') {
         throw errorHelper.createError(
@@ -121,7 +185,7 @@ module.exports = {
 
       // Encrypt the new password using bcrypt
       const encryptedPassword = await cryptoHelper.encryptPassword(newPassword);
-      
+
       // Update user password with encrypted version
       const updatedUser = await User.updateOne({ id: user.id })
         .set({
@@ -144,7 +208,7 @@ module.exports = {
       };
     } catch (error) {
       console.error('Reset password with token error:', error);
-      
+
       if (error.name === 'JsonWebTokenError') {
         throw errorHelper.createError(
           'Invalid or expired token',
@@ -152,7 +216,7 @@ module.exports = {
           400
         );
       }
-      
+
       if (error.name === 'TokenExpiredError') {
         throw errorHelper.createError(
           'Token has expired',
@@ -160,7 +224,7 @@ module.exports = {
           400
         );
       }
-      
+
       throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'reset', 'Password');
     }
   },
@@ -169,11 +233,11 @@ module.exports = {
    * Verify password reset token
    * @param {string} token - JWT reset token
    */
-  verifyPasswordResetToken: async function(token) {
+  verifyPasswordResetToken: async function (token) {
     try {
       // Verify and decode the token
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
-      
+
       // Validate token type
       if (decoded.type !== 'password_reset') {
         throw errorHelper.createError(
@@ -212,7 +276,7 @@ module.exports = {
       };
     } catch (error) {
       console.error('Verify password reset token error:', error);
-      
+
       if (error.name === 'JsonWebTokenError') {
         throw errorHelper.createError(
           'Invalid token',
@@ -220,7 +284,7 @@ module.exports = {
           400
         );
       }
-      
+
       if (error.name === 'TokenExpiredError') {
         throw errorHelper.createError(
           'Token has expired',
@@ -228,7 +292,7 @@ module.exports = {
           400
         );
       }
-      
+
       throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'verify', 'Token');
     }
   },
@@ -238,7 +302,7 @@ module.exports = {
    * @param {string} email - User email
    * @param {string} password - User password
    */
-  authenticateUser: async function(email, password) {
+  authenticateUser: async function (email, password) {
     try {
       if (!email || !password) {
         throw errorHelper.createError(
@@ -278,11 +342,11 @@ module.exports = {
       }
 
       // Get user's current account
-      const userAccount = await UserAccount.findOne({ 
+      const userAccount = await UserAccount.findOne({
         userId: user.id,
-        accountId: user.currentAccountId 
+        accountId: user.currentAccountId
       });
-      
+
       if (!userAccount) {
         throw errorHelper.createError(
           'User account not found',
@@ -305,7 +369,7 @@ module.exports = {
       const allUserAccounts = await UserAccount.find({ userId: user.id });
       const accountIds = allUserAccounts.map(ua => ua.accountId);
       const allAccounts = await Account.find({ id: accountIds });
-      
+
       // Format accounts array
       const accounts = allAccounts.map(acc => ({
         accountId: acc.id,
@@ -332,7 +396,7 @@ module.exports = {
         // status: userAccount.status,
         // username: user.name || `${user.firstName} ${user.lastName}`.trim(),
         // accounts: accounts,
-        __typename:"AuthenticatedUser",
+        __typename: "AuthenticatedUser",
         token: jwtToken
       };
     } catch (error) {

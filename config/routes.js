@@ -48,12 +48,14 @@ module.exports.routes = {
 
   // auth routes
   'POST /auth/login': { controller: 'auth/AuthController', action: 'login' },
+  'POST /auth/switch-account': { controller: 'auth/AuthController', action: 'switchAccount' },
   'POST /auth/forgot-password': { controller: 'auth/AuthController', action: 'forgotPassword' },
   'POST /auth/reset-password': { controller: 'auth/AuthController', action: 'resetPassword' },
   'GET /auth/verify-reset-token/:token': { controller: 'auth/AuthController', action: 'verifyResetToken' },
 
   // permission routes
   'GET /users/:userId/permissions': { controller: 'permission/PermissionController', action: 'getPermissionsByUserId' },
+  'GET /users/by-user': { controller: 'user/UserController', action: 'getUsersByUserId' },
   'GET /users/me': { controller: 'user/UserController', action: 'getUserByIdToken' },
   'GET /users/:userId': { controller: 'user/UserController', action: 'getUserById' },
 

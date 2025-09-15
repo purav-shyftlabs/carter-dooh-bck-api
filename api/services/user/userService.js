@@ -58,6 +58,63 @@ module.exports = {
     }
   },
 
+  getUsersByEmail: async function(email) {
+    try {
+      if (!email) {
+        throw errorHelper.createError('Email is required', 'EMAIL_REQUIRED', 400);
+      }
+
+      // Find all users with this email
+      const users = await User.find({ email: email.toLowerCase() });
+      if (!users || users.length === 0) {
+        return [];
+      }
+
+      const userIds = users.map(user => user.id);
+
+      // Find all UserAccount entries for these users
+      const userAccounts = await UserAccount.find({ userId: userIds });
+      if (!userAccounts || userAccounts.length === 0) {
+        return [];
+      }
+
+      // Get unique account IDs
+      const accountIds = [...new Set(userAccounts.map(ua => ua.accountId))];
+      
+      // Get account details
+      const accounts = await Account.find({ id: accountIds });
+      const accountMap = {};
+      accounts.forEach(acc => {
+        accountMap[acc.id] = acc;
+      });
+
+      // Build response with user and account information
+      const result = userAccounts.map(userAccount => {
+        const user = users.find(u => u.id === userAccount.userId);
+        const account = accountMap[userAccount.accountId];
+        
+        return {
+          userId: user.id,
+          email: user.email,
+          name: user.name,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          accountId: userAccount.accountId,
+          accountName: account ? account.name : null,
+          userType: userAccount.userType,
+          roleType: userAccount.roleType,
+          active: userAccount.active,
+          currentAccountId: user.currentAccountId
+        };
+      });
+
+      return result;
+    } catch (error) {
+      console.error('Get users by email error:', error);
+      throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'fetch', 'Users by email');
+    }
+  },
+
   editUser: async function(userId, updateData, contextAccountId) {
     try {
       console.log('=== editUser Service ===');

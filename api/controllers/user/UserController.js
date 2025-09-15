@@ -65,6 +65,33 @@ module.exports = {
     }
   },
 
+  getUsersByUserId: async (req, res) => {
+    try {
+      // Get user info from token (handled by policy)
+      const { userId } = req.user;
+      if (!userId) {
+        return responseHelper.error(res, 'User ID not found in token', 401);
+      }
+
+      // Get current user to fetch their email
+      const currentUser = await userService.getUserById(userId);
+      if (!currentUser) {
+        return responseHelper.error(res, 'User not found', 404);
+      }
+
+      // Find all users under this email from UserAccount table
+      const result = await userService.getUsersByEmail(currentUser.email);
+      
+      return responseHelper.success(res, result, 'Users fetched successfully');
+    } catch (err) {
+      if (err.statusCode) {
+        return responseHelper.error(res, err.message, err.statusCode, err.details);
+      }
+      errorHelper.logError(err, 'UserController.getUsersByUserId', { user: req.user });
+      return responseHelper.serverError(res, 'An unexpected error occurred');
+    }
+  },
+
 
   getAllUsers: async (req, res) => {
     try {

@@ -8,6 +8,44 @@ const errorHelper = require('../../utils/errorHelper');
 
 module.exports = {
   /**
+   * Switch current account
+   * POST /auth/switch-account
+   */
+  switchAccount: async function(req, res) {
+    try {
+      const { accountId } = req.body;
+      if (!accountId) {
+        return res.badRequest({
+          message: 'accountId is required',
+          code: 'ACCOUNT_ID_REQUIRED'
+        });
+      }
+
+      // req.user is populated by JWT policy
+      const { userId } = req.user || {};
+      if (!userId) {
+        return res.unauthorized({ message: 'Unauthorized', code: 'UNAUTHORIZED' });
+      }
+
+      const result = await authService.switchAccount(userId, accountId);
+      return res.ok(result);
+    } catch (error) {
+      console.error('Switch account error (controller):', error);
+
+      if (error.statusCode) {
+        return res.status(error.statusCode).json({
+          message: error.message,
+          code: error.code
+        });
+      }
+
+      return res.serverError({
+        message: 'Internal server error',
+        code: 'INTERNAL_ERROR'
+      });
+    }
+  },
+  /**
    * Send password reset email
    * POST /auth/forgot-password
    */

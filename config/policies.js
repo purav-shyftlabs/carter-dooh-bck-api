@@ -36,9 +36,9 @@ module.exports.policies = {
   },
 
   // Account Controller - All actions require JWT authentication
-  'account/AccountController': {
-    '*': 'isAuthenticated'
-  },
+  // 'account/AccountController': {
+  //   '*': 'isAuthenticated'
+  // },
 
   // Auth Controller - Only login and password reset don't require authentication
   'auth/AuthController': {
