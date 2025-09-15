@@ -8,7 +8,7 @@ const sqlTemplates = sails.config.globals.sqlTemplates;
 const buildQuery = sails.config.globals.buildQuery;
 
 module.exports = {
-  getUserById: async function(userId) {
+  getUserById: async function(userId, currentUserId = null, accountId = null) {
     try {
       // Waterline: fetch user
       const numericUserId = Number(userId);
@@ -50,6 +50,27 @@ module.exports = {
         lastReadReleaseNotesVersion: userAccount.lastReadReleaseNotesVersion || null,
         permissions
       };
+      console.log('currentUserId', currentUserId);
+      console.log('accountId', accountId);
+      accountId = userAccount.accountId;
+      // Add permission comparison flags if current user context is provided
+      if (currentUserId && accountId) {
+        try {
+          const permissionService = require('../permission/permissionService');
+          const comparison = await permissionService.compareUserPermissions(
+            currentUserId, 
+            accountId
+          );
+          
+          formattedUser.showStandard = comparison.showStandard;
+          formattedUser.showAdmin = comparison.showAdmin;
+        } catch (permErr) {
+          console.warn('Permission comparison failed:', permErr);
+          // Don't fail the whole request if permission comparison fails
+          formattedUser.showStandard = false;
+          formattedUser.showAdmin = false;
+        }
+      }
 
       return formattedUser;
     } catch (error) {

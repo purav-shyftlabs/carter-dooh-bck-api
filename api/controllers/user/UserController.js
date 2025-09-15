@@ -65,6 +65,7 @@ module.exports = {
     }
   },
 
+
   getUsersByUserId: async (req, res) => {
     try {
       // Get user info from token (handled by policy)
@@ -197,8 +198,11 @@ module.exports = {
         return responseHelper.error(res, 'User ID is required', 400);
       }
 
+      // Get current user context for permission comparison
+      const { userId: currentUserId, accountId } = req.user || {};
+
       console.log('Fetching user with ID:', userId);
-      const result = await userService.getUserById(userId);
+      const result = await userService.getUserById(userId, currentUserId, accountId);
       console.log('User result:', result);
 
       return responseHelper.success(res, result, 'User fetched successfully');
@@ -221,10 +225,13 @@ module.exports = {
       console.log('===========================');
 
       // Get user info from token (handled by policy)
-      const { userId } = req.user;
+  // Get current user context for permission comparison
+      // get user id from token
+      const userId = req.user.userId;
 
+      const { userId: currentUserId, accountId } = req.user || {};
       console.log('Fetching user with ID:', userId);
-      const result = await userService.getUserById(userId);
+      const result = await userService.getUserById(userId, currentUserId, accountId);
       console.log('User result:', result);
 
       return responseHelper.success(res, result, 'User fetched successfully');

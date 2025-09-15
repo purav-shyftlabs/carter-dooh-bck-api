@@ -9,86 +9,86 @@ class AccessValidator {
         // Define hierarchy of allowed AccessLevels for each PermissionType
         // (from lowest to highest)
         this.permissionAccessMapping = {
-            [PermissionType.AD_INVENTORY_PLACEMENTS]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.VIEW_ACCESS,
-                AccessLevel.FULL_ACCESS
-            ],
-            [PermissionType.AUDIENCE_KEYS_VALUES]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.VIEW_ACCESS,
-                AccessLevel.FULL_ACCESS
-            ],
-            [PermissionType.ALL_PUBLISHER_CAMPAIGNS]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.VIEW_ACCESS,
-                AccessLevel.FULL_ACCESS
-            ],
-            [PermissionType.ALL_ADVERTISER_CAMPAIGNS]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.VIEW_ACCESS,
-                AccessLevel.FULL_ACCESS
-            ],
-            [PermissionType.CREATIVE_TEMPLATE]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.VIEW_ACCESS,
-                AccessLevel.FULL_ACCESS
-            ],
-            [PermissionType.REPORT_GENERATION]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.CAMPAIGN_LEVEL,
-                AccessLevel.FULL_ACCESS,
-                AccessLevel.COMPREHENSIVE_ACCESS
-            ],
-            [PermissionType.ADVERTISER_MANAGEMENT]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.VIEW_ACCESS,
-                AccessLevel.FULL_ACCESS
-            ],
+            // [PermissionType.AD_INVENTORY_PLACEMENTS]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.VIEW_ACCESS,
+            //     AccessLevel.FULL_ACCESS
+            // ],
+            // [PermissionType.AUDIENCE_KEYS_VALUES]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.VIEW_ACCESS,
+            //     AccessLevel.FULL_ACCESS
+            // ],
+            // [PermissionType.ALL_PUBLISHER_CAMPAIGNS]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.VIEW_ACCESS,
+            //     AccessLevel.FULL_ACCESS
+            // ],
+            // [PermissionType.ALL_ADVERTISER_CAMPAIGNS]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.VIEW_ACCESS,
+            //     AccessLevel.FULL_ACCESS
+            // ],
+            // [PermissionType.CREATIVE_TEMPLATE]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.VIEW_ACCESS,
+            //     AccessLevel.FULL_ACCESS
+            // ],
+            // [PermissionType.REPORT_GENERATION]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.CAMPAIGN_LEVEL,
+            //     AccessLevel.FULL_ACCESS,
+            //     AccessLevel.COMPREHENSIVE_ACCESS
+            // ],
+            // [PermissionType.ADVERTISER_MANAGEMENT]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.VIEW_ACCESS,
+            //     AccessLevel.FULL_ACCESS
+            // ],
             [PermissionType.USER_MANAGEMENT]: [
                 AccessLevel.NO_ACCESS,
                 AccessLevel.VIEW_ACCESS,
                 AccessLevel.FULL_ACCESS
             ],
-            [PermissionType.APPROVAL_REQUESTS]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.CREATIVE_REQUESTS,
-                AccessLevel.ALL_REQUESTS
-            ],
-            [PermissionType.WALLET]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.VIEW_ACCESS,
-                AccessLevel.MANAGE_WALLET,
-                AccessLevel.FULL_ACCESS
-            ],
-            [PermissionType.INSIGHT_DASHBOARD]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.VIEW_ACCESS
-            ],
-            [PermissionType.ACCOUNT_SETUP]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.VIEW_ACCESS,
-                AccessLevel.FULL_ACCESS
-            ],
-            [PermissionType.PUBLIC_API_ACCESS]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.FULL_ACCESS
-            ],
-            [PermissionType.YIELD_MANAGEMENT]: [
+            // [PermissionType.APPROVAL_REQUESTS]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.CREATIVE_REQUESTS,
+            //     AccessLevel.ALL_REQUESTS
+            // ],
+            // [PermissionType.WALLET]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.VIEW_ACCESS,
+            //     AccessLevel.MANAGE_WALLET,
+            //     AccessLevel.FULL_ACCESS
+            // ],
+            // [PermissionType.INSIGHT_DASHBOARD]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.VIEW_ACCESS
+            // ],
+            [PermissionType.ACCOUNT_SETTINGS]: [
                 AccessLevel.NO_ACCESS,
                 AccessLevel.VIEW_ACCESS,
                 AccessLevel.FULL_ACCESS
             ],
-            [PermissionType.OFFSITE_INTEGRATIONS]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.VIEW_ACCESS,
-                AccessLevel.FULL_ACCESS
-            ],
-            [PermissionType.OFFSITE_CAMPAIGNS]: [
-                AccessLevel.NO_ACCESS,
-                AccessLevel.VIEW_ACCESS,
-                AccessLevel.FULL_ACCESS
-            ]
+            // [PermissionType.PUBLIC_API_ACCESS]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.FULL_ACCESS
+            // ],
+            // [PermissionType.YIELD_MANAGEMENT]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.VIEW_ACCESS,
+            //     AccessLevel.FULL_ACCESS
+            // ],
+            // [PermissionType.OFFSITE_INTEGRATIONS]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.VIEW_ACCESS,
+            //     AccessLevel.FULL_ACCESS
+            // ],
+            // [PermissionType.OFFSITE_CAMPAIGNS]: [
+            //     AccessLevel.NO_ACCESS,
+            //     AccessLevel.VIEW_ACCESS,
+            //     AccessLevel.FULL_ACCESS
+            // ]
         };
     }
 
