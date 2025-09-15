@@ -10,71 +10,47 @@ const buildQuery = sails.config.globals.buildQuery;
 module.exports = {
   getUserById: async function(userId) {
     try {
-      // Get user details
-      const userWhereClause = buildQuery.buildWhereClause({ id: userId });
-      const userQuery = sqlTemplates.select.findOne('user', userWhereClause);
-      const userValues = buildQuery.extractValues({ id: userId });
-      
-      const userResult = await sails.sendNativeQuery(userQuery, userValues);
-      if (!userResult.rows || userResult.rows.length === 0) {
+      // Waterline: fetch user
+      const numericUserId = Number(userId);
+      const user = await User.findOne({ id: numericUserId });
+      if (!user) {
         throw errorHelper.createError('User not found', 'USER_NOT_FOUND', 404);
       }
-      
-      const user = userResult.rows[0];
-      
-      // Get user account details for the current account
-      const userAccountWhereClause = buildQuery.buildWhereClause({ 
-        user_id: userId, 
-        account_id: user.current_account_id 
-      });
-      const userAccountQuery = sqlTemplates.select.findOne('user_account', userAccountWhereClause);
-      const userAccountValues = buildQuery.extractValues({ 
-        user_id: userId, 
-        account_id: user.current_account_id 
-      });
-      
-      const userAccountResult = await sails.sendNativeQuery(userAccountQuery, userAccountValues);
-      if (!userAccountResult.rows || userAccountResult.rows.length === 0) {
+
+      // Waterline: fetch user's account (current account)
+      const userAccount = await UserAccount.findOne({ userId: numericUserId, accountId: user.currentAccountId });
+      if (!userAccount) {
         throw errorHelper.createError('User account not found', 'USER_ACCOUNT_NOT_FOUND', 404);
       }
-      
-      const userAccount = userAccountResult.rows[0];
-      
-      // Get user permissions for this account
-      const permissionsWhereClause = buildQuery.buildWhereClause({ 
-        user_id: userId, 
-        account_id: userAccount.account_id 
+
+      // Waterline: fetch permissions for this user and account
+      const permissionsRows = await UserPermission.find({
+        where: { userId: numericUserId, accountId: userAccount.accountId },
+        select: ['permissionType', 'accessLevel']
       });
-      const permissionsQuery = sqlTemplates.select.findAll('user_permission', permissionsWhereClause);
-      const permissionsValues = buildQuery.extractValues({ 
-        user_id: userId, 
-        account_id: userAccount.account_id 
-      });
-      
-      const permissionsResult = await sails.sendNativeQuery(permissionsQuery, permissionsValues);
-      const permissions = permissionsResult.rows.map(perm => ({
-        permissionType: perm.permission_type,
-        accessLevel: perm.access_level
+      const permissions = permissionsRows.map(perm => ({
+        permissionType: perm.permissionType,
+        accessLevel: perm.accessLevel
       }));
-      
-      // Format response according to the specified structure
+
+      // Build response
       const formattedUser = {
-        id: user.id.toString(),
-        accountId: userAccount.account_id.toString(),
-        name: user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-        roleType: userAccount.role_type,
-        userType: userAccount.user_type,
-        timeZoneName: userAccount.timezone_name,
+        id: String(user.id),
+        accountId: String(userAccount.accountId),
+        name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+        roleType: userAccount.roleType,
+        userType: userAccount.userType,
+        timeZoneName: userAccount.timezoneName,
         email: user.email,
-        isFirstTimeLogin: userAccount.is_first_time_login || false,
-        lastLoginTimestamp: userAccount.last_login_timestamp ? userAccount.last_login_timestamp.toISOString() : null,
-        firstLoginTimestamp: userAccount.first_login_timestamp ? userAccount.first_login_timestamp.toISOString() : null,
-        acceptedTermsAndConditions: userAccount.accepted_terms_and_conditions || false,
-        allowAllAdvertisers: userAccount.allow_all_brands || false,
-        lastReadReleaseNotesVersion: userAccount.last_read_release_notes_version || null,
-        permissions: permissions
+        isFirstTimeLogin: Boolean(userAccount.isFirstTimeLogin),
+        lastLoginTimestamp: userAccount.lastLoginTimestamp ? new Date(userAccount.lastLoginTimestamp).toISOString() : null,
+        firstLoginTimestamp: userAccount.firstLoginTimestamp ? new Date(userAccount.firstLoginTimestamp).toISOString() : null,
+        acceptedTermsAndConditions: Boolean(userAccount.acceptedTermsAndConditions),
+        allowAllAdvertisers: Boolean(userAccount.allowAllBrands),
+        lastReadReleaseNotesVersion: userAccount.lastReadReleaseNotesVersion || null,
+        permissions
       };
-      
+
       return formattedUser;
     } catch (error) {
       console.error('Get user by ID error:', error);
@@ -82,104 +58,90 @@ module.exports = {
     }
   },
 
-  editUser: async function(userId, updateData) {
+  editUser: async function(userId, updateData, contextAccountId) {
     try {
       console.log('=== editUser Service ===');
       console.log('User ID:', userId);
       console.log('Update Data:', updateData);
 
+      const numericUserId = Number(userId);
+
       // Validate that user exists
-      const userWhereClause = buildQuery.buildWhereClause({ id: userId });
-      const userQuery = sqlTemplates.select.findOne('user', userWhereClause);
-      const userValues = buildQuery.extractValues({ id: userId });
-      
-      const userResult = await sails.sendNativeQuery(userQuery, userValues);
-      if (!userResult.rows || userResult.rows.length === 0) {
+      const user = await User.findOne({ id: numericUserId });
+      if (!user) {
         throw errorHelper.createError('User not found', 'USER_NOT_FOUND', 404);
       }
-      
-      const user = userResult.rows[0];
-      console.log('Found user:', user);
 
-      // Get user account details for the current account
-      const userAccountWhereClause = buildQuery.buildWhereClause({ 
-        user_id: userId, 
-        account_id: user.current_account_id 
-      });
-      const userAccountQuery = sqlTemplates.select.findOne('user_account', userAccountWhereClause);
-      const userAccountValues = buildQuery.extractValues({ 
-        user_id: userId, 
-        account_id: user.current_account_id 
-      });
-      
-      const userAccountResult = await sails.sendNativeQuery(userAccountQuery, userAccountValues);
-      if (!userAccountResult.rows || userAccountResult.rows.length === 0) {
+      // Resolve target account: prefer contextAccountId from token; fallback to user's currentAccountId
+      const targetAccountId = contextAccountId || user.currentAccountId;
+
+      // Get user account for the target account
+      const userAccount = await UserAccount.findOne({ userId: numericUserId, accountId: targetAccountId });
+      if (!userAccount) {
         throw errorHelper.createError('User account not found', 'USER_ACCOUNT_NOT_FOUND', 404);
       }
-      
-      const userAccount = userAccountResult.rows[0];
-      console.log('Found user account:', userAccount);
 
-      // Prepare update data for user table
+      // Prepare update data for models (use Waterline attribute names)
       const userUpdateData = {};
       const userAccountUpdateData = {};
 
-      // Map update fields to database columns
       if (updateData.name !== undefined) userUpdateData.name = updateData.name;
-      if (updateData.firstName !== undefined) userUpdateData.first_name = updateData.firstName;
-      if (updateData.lastName !== undefined) userUpdateData.last_name = updateData.lastName;
+      if (updateData.firstName !== undefined) userUpdateData.firstName = updateData.firstName;
+      if (updateData.lastName !== undefined) userUpdateData.lastName = updateData.lastName;
       if (updateData.email !== undefined) userUpdateData.email = updateData.email;
-      if (updateData.phone !== undefined) userUpdateData.phone = updateData.phone;
+      if (updateData.currentAccountId !== undefined) userUpdateData.currentAccountId = updateData.currentAccountId;
 
-      // UserAccount fields
-      if (updateData.roleType !== undefined) userAccountUpdateData.role_type = updateData.roleType;
-      if (updateData.userType !== undefined) userAccountUpdateData.user_type = updateData.userType;
-      if (updateData.timeZoneName !== undefined) userAccountUpdateData.timezone_name = updateData.timeZoneName;
-      if (updateData.isFirstTimeLogin !== undefined) userAccountUpdateData.is_first_time_login = updateData.isFirstTimeLogin;
-      if (updateData.acceptedTermsAndConditions !== undefined) userAccountUpdateData.accepted_terms_and_conditions = updateData.acceptedTermsAndConditions;
-      if (updateData.allowAllAdvertisers !== undefined) userAccountUpdateData.allow_all_brands = updateData.allowAllAdvertisers;
-      if (updateData.useCustomBranding !== undefined) userAccountUpdateData.use_custom_branding = updateData.useCustomBranding;
-      if (updateData.lastReadReleaseNotesVersion !== undefined) userAccountUpdateData.last_read_release_notes_version = updateData.lastReadReleaseNotesVersion;
+      if (updateData.roleType !== undefined) userAccountUpdateData.roleType = updateData.roleType;
+      if (updateData.userType !== undefined) userAccountUpdateData.userType = updateData.userType;
+      if (updateData.timeZoneName !== undefined) userAccountUpdateData.timezoneName = updateData.timeZoneName;
+      if (updateData.isFirstTimeLogin !== undefined) userAccountUpdateData.isFirstTimeLogin = updateData.isFirstTimeLogin;
+      if (updateData.acceptedTermsAndConditions !== undefined) userAccountUpdateData.acceptedTermsAndConditions = updateData.acceptedTermsAndConditions;
+      if (updateData.allowAllAdvertisers !== undefined) userAccountUpdateData.allowAllBrands = updateData.allowAllAdvertisers;
+      if (updateData.useCustomBranding !== undefined) userAccountUpdateData.useCustomBranding = updateData.useCustomBranding;
+      if (updateData.lastReadReleaseNotesVersion !== undefined) userAccountUpdateData.lastReadReleaseNotesVersion = updateData.lastReadReleaseNotesVersion;
+      if (updateData.active !== undefined) userAccountUpdateData.active = updateData.active;
+      if (updateData.enableTwoFactorAuthentication !== undefined) userAccountUpdateData.enableTwoFactorAuthentication = updateData.enableTwoFactorAuthentication;
 
-      // Update user table if there are changes
+      // Update User if needed
       if (Object.keys(userUpdateData).length > 0) {
-        userUpdateData.updated_at = new Date();
-        const userUpdateWhereClause = buildQuery.buildWhereClause({ id: userId });
-        const userUpdateQuery = sqlTemplates.update('user', userUpdateData, userUpdateWhereClause);
-        const userUpdateValues = buildQuery.extractValues({ ...userUpdateData, id: userId });
-        
-        console.log('Updating user with query:', userUpdateQuery);
-        console.log('User update values:', userUpdateValues);
-        
-        await sails.sendNativeQuery(userUpdateQuery, userUpdateValues);
-        console.log('User table updated successfully');
+        await User.updateOne({ id: numericUserId }).set(userUpdateData);
       }
 
-      // Update user_account table if there are changes
+      // Update UserAccount if needed
       if (Object.keys(userAccountUpdateData).length > 0) {
-        userAccountUpdateData.updated_at = new Date();
-        const userAccountUpdateWhereClause = buildQuery.buildWhereClause({ 
-          user_id: userId, 
-          account_id: user.current_account_id 
-        });
-        const userAccountUpdateQuery = sqlTemplates.update('user_account', userAccountUpdateData, userAccountUpdateWhereClause);
-        const userAccountUpdateValues = buildQuery.extractValues({ 
-          ...userAccountUpdateData, 
-          user_id: userId, 
-          account_id: user.current_account_id 
-        });
-        
-        console.log('Updating user_account with query:', userAccountUpdateQuery);
-        console.log('User account update values:', userAccountUpdateValues);
-        
-        await sails.sendNativeQuery(userAccountUpdateQuery, userAccountUpdateValues);
-        console.log('User account table updated successfully');
+        await UserAccount.updateOne({ userId: numericUserId, accountId: targetAccountId }).set(userAccountUpdateData);
       }
 
-      // Get updated user data
-      const updatedUser = await this.getUserById(userId);
-      console.log('Updated user data:', updatedUser);
+      // Update permissions if provided (replace strategy for current account)
+      if (Array.isArray(updateData.permissions)) {
+        // Basic validation
+        for (const perm of updateData.permissions) {
+          if (!perm || !perm.permissionType || !perm.accessLevel) {
+            throw errorHelper.createError(
+              'Each permission must include permissionType and accessLevel',
+              'INVALID_PERMISSION',
+              400
+            );
+          }
+        }
 
+        // Remove existing permissions for this user and account
+        await UserPermission.destroy({ userId: numericUserId, accountId: targetAccountId });
+
+        // Create new permissions
+        if (updateData.permissions.length > 0) {
+          const rows = updateData.permissions.map(p => ({
+            userId: numericUserId,
+            accountId: targetAccountId,
+            permissionType: String(p.permissionType).toUpperCase(),
+            accessLevel: String(p.accessLevel).toUpperCase()
+          }));
+          await UserPermission.createEach(rows);
+        }
+      }
+
+      // Return updated user via service
+      const updatedUser = await this.getUserById(numericUserId);
       return updatedUser;
     } catch (error) {
       console.error('Edit user error:', error);
@@ -376,7 +338,8 @@ module.exports = {
             email: 'N/A',
             userType: ua.userType,
             status: ua.status,
-            roleType: ua.roleType
+            roleType: ua.roleType,
+            allowAllAdvertisers: ua.allowAllBrands
           };
         }
         return {
@@ -386,6 +349,7 @@ module.exports = {
           userType: ua.userType,
           status: ua.status,
           roleType: ua.roleType,
+          allowAllAdvertisers: ua.allowAllBrands
         };
       });
 
