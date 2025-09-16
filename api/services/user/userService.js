@@ -6,7 +6,7 @@ const PermissionType = require('../../enums/permissionType');
 const AccessLevel = require('../../enums/accessLevel');
 
 module.exports = {
-  getUserById: async function(userId, currentUserId = null, accountId = null) {
+  getUserById: async function(userId, currentUserId = null, accountId = null, isFromToken = false) {
     try {
       // Waterline: fetch user
       const numericUserId = Number(userId);
@@ -21,11 +21,17 @@ module.exports = {
         throw errorHelper.createError('User account not found', 'USER_ACCOUNT_NOT_FOUND', 404);
       }
 
+      // check currentUSer has permission to view this user
+      if(!isFromToken) {
+        await userHelper.validateUserPermission(currentUserId, userAccount.accountId, PermissionType.USER_MANAGEMENT, AccessLevel.VIEW_ACCESS);
+      }
+
       // Waterline: fetch permissions for this user and account
       const permissionsRows = await UserPermission.find({
         where: { userId: numericUserId, accountId: userAccount.accountId },
         select: ['permissionType', 'accessLevel']
       });
+
       const permissions = permissionsRows.map(perm => ({
         permissionType: perm.permissionType,
         accessLevel: perm.accessLevel
@@ -48,8 +54,7 @@ module.exports = {
         lastReadReleaseNotesVersion: userAccount.lastReadReleaseNotesVersion || null,
         permissions
       };
-      console.log('currentUserId', currentUserId);
-      console.log('accountId', accountId);
+      
       accountId = userAccount.accountId;
       // Add permission comparison flags if current user context is provided
       if (currentUserId && accountId) {
@@ -134,87 +139,109 @@ module.exports = {
     }
   },
 
-  editUser: async function(userId, updateData, contextAccountId, currentUserId) {
+  editUser: async function (userId, updateData, contextAccountId, currentUserId) {
+    const db = sails.getDatastore().transaction;
+    const numericUserId = Number(userId);
+  
     try {
-      // Authorization: require FULL_ACCESS for USER_MANAGEMENT
-      await userHelper.validateUserPermission(currentUserId, contextAccountId, PermissionType.USER_MANAGEMENT, AccessLevel.FULL_ACCESS);
-
-      const numericUserId = Number(userId);
-
-      // Strict PATCH: take account from token only
-      const targetAccountId = contextAccountId;
-
-      // Prepare update data for models (use Waterline attribute names)
-      const userUpdateData = {};
-      const userAccountUpdateData = {};
-
-      if (updateData.name !== undefined) userUpdateData.name = updateData.name;
-      if (updateData.firstName !== undefined) userUpdateData.firstName = updateData.firstName;
-      if (updateData.lastName !== undefined) userUpdateData.lastName = updateData.lastName;
-      if (updateData.email !== undefined) userUpdateData.email = updateData.email;
-      if (updateData.currentAccountId !== undefined) userUpdateData.currentAccountId = updateData.currentAccountId;
-
-      if (updateData.roleType !== undefined) userAccountUpdateData.roleType = updateData.roleType;
-      if (updateData.userType !== undefined) userAccountUpdateData.userType = updateData.userType;
-      if (updateData.timeZoneName !== undefined) userAccountUpdateData.timezoneName = updateData.timeZoneName;
-      if (updateData.isFirstTimeLogin !== undefined) userAccountUpdateData.isFirstTimeLogin = updateData.isFirstTimeLogin;
-      if (updateData.acceptedTermsAndConditions !== undefined) userAccountUpdateData.acceptedTermsAndConditions = updateData.acceptedTermsAndConditions;
-      if (updateData.allowAllAdvertisers !== undefined) userAccountUpdateData.allowAllBrands = updateData.allowAllAdvertisers;
-      if (updateData.useCustomBranding !== undefined) userAccountUpdateData.useCustomBranding = updateData.useCustomBranding;
-      if (updateData.lastReadReleaseNotesVersion !== undefined) userAccountUpdateData.lastReadReleaseNotesVersion = updateData.lastReadReleaseNotesVersion;
-      if (updateData.active !== undefined) userAccountUpdateData.active = updateData.active;
-      if (updateData.enableTwoFactorAuthentication !== undefined) userAccountUpdateData.enableTwoFactorAuthentication = updateData.enableTwoFactorAuthentication;
-
-      // Update User if needed
-      if (Object.keys(userUpdateData).length > 0) {
-        await User.updateOne({ id: numericUserId }).set(userUpdateData);
+      await userHelper.validateUserPermission(
+        currentUserId,
+        contextAccountId,
+        PermissionType.USER_MANAGEMENT,
+        AccessLevel.FULL_ACCESS
+      );
+  
+      // ✅ Field maps
+      const userFields = ['name', 'firstName', 'lastName', 'email', 'currentAccountId'];
+      const userAccountFields = [
+        'roleType',
+        'userType',
+        'timeZoneName',
+        'isFirstTimeLogin',
+        'acceptedTermsAndConditions',
+        'allowAllAdvertisers',   // maps -> allowAllBrands
+        'useCustomBranding',
+        'lastReadReleaseNotesVersion',
+        'active',
+        'enableTwoFactorAuthentication'
+      ];
+  
+      // ✅ Build updates
+      const userUpdateData = _.pick(updateData, userFields);
+      const userAccountUpdateData = _.pick(updateData, userAccountFields);
+  
+      // Map special cases
+      if (updateData.allowAllAdvertisers !== undefined) {
+        userAccountUpdateData.allowAllBrands = updateData.allowAllAdvertisers;
+        delete userAccountUpdateData.allowAllAdvertisers;
       }
-
-      // Update UserAccount if needed (only if we have an account context)
-      if (targetAccountId && Object.keys(userAccountUpdateData).length > 0) {
-        await UserAccount.updateOne({ userId: numericUserId, accountId: targetAccountId }).set(userAccountUpdateData);
-      }
-
-      // Update permissions if provided (upsert only provided permissions; do not delete others)
-      if (targetAccountId && Array.isArray(updateData.permissions)) {
-        for (const p of updateData.permissions) {
-          if (!p) continue;
-          const permissionType = p.permissionType ? String(p.permissionType).toUpperCase() : null;
-          const accessLevel = p.accessLevel ? String(p.accessLevel).toUpperCase() : null;
-          if (!permissionType || !accessLevel) continue;
-
-          const updated = await UserPermission.updateOne({
+  
+      //  Transaction to ensure atomic updates
+      const result = await db(async (dbSession) => {
+        // Update User
+        if (!_.isEmpty(userUpdateData)) {
+          await User.updateOne({ id: numericUserId })
+            .set(userUpdateData)
+            .usingConnection(dbSession);
+        }
+  
+        // Update UserAccount
+        if (contextAccountId && !_.isEmpty(userAccountUpdateData)) {
+          await UserAccount.updateOne({
             userId: numericUserId,
-            accountId: targetAccountId,
-            permissionType
-          }).set({ accessLevel });
-
-          if (!updated) {
-            await UserPermission.create({
+            accountId: contextAccountId
+          })
+            .set(userAccountUpdateData)
+            .usingConnection(dbSession);
+        }
+  
+        // Update Permissions (upsert)
+        if (contextAccountId && Array.isArray(updateData.permissions)) {
+          for (const p of updateData.permissions) {
+            if (!p?.permissionType || !p?.accessLevel) continue;
+  
+            const permissionType = String(p.permissionType).toUpperCase();
+            const accessLevel = String(p.accessLevel).toUpperCase();
+  
+            const updated = await UserPermission.updateOne({
               userId: numericUserId,
-              accountId: targetAccountId,
-              permissionType,
-              accessLevel
-            });
+              accountId: contextAccountId,
+              permissionType
+            })
+              .set({ accessLevel })
+              .usingConnection(dbSession);
+  
+            if (!updated) {
+              await UserPermission.create({
+                userId: numericUserId,
+                accountId: contextAccountId,
+                permissionType,
+                accessLevel
+              }).usingConnection(dbSession);
+            }
           }
         }
-      }
-
-      // Return updated user so caller immediately sees changes
+  
+        return true; // success marker
+      });
+  
+      // Return consistent response
       try {
-        const updatedUser = await this.getUserById(numericUserId, currentUserId, targetAccountId);
+        const updatedUser = await this.getUserById(numericUserId, currentUserId, contextAccountId);
         return updatedUser;
-      } catch (e) {
-        // If fetch fails, fall back to minimal confirmation
+      } catch (err) {
+        sails.log.warn('Could not fetch updated user, returning fallback.');
         return {
           id: numericUserId,
-          accountId: targetAccountId || null,
+          accountId: contextAccountId || null,
           updated: true
         };
       }
     } catch (error) {
-      console.error('Edit user error:', error);
-      throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'update', 'User');
+      sails.log.error('Edit user error:', error);
+      throw error.statusCode
+        ? error
+        : errorHelper.handleDatabaseError(error, 'update', 'User');
     }
   },
   

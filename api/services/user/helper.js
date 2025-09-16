@@ -84,30 +84,6 @@ module.exports = {
   },
 
   /**
-   * Validate brands configuration
-   * @param {Object} value - User data object
-   */
-  validateBrandsConfiguration: function(value) {
-    const { allowAllBrands, allowAllBrandsList } = value;
-    
-    if (allowAllBrands === true && allowAllBrandsList?.length > 0) {
-      throw errorHelper.createError(
-        'allowAllBrandsList should be empty when allowAllBrands is true',
-        'INVALID_BRANDS_CONFIG', 
-        400
-      );
-    }
-    
-    if (allowAllBrands === false && (!allowAllBrandsList || allowAllBrandsList.length === 0)) {
-      throw errorHelper.createError(
-        'allowAllBrandsList is required when allowAllBrands is false',
-        'MISSING_BRANDS_LIST', 
-        400
-      );
-    }
-  },
-
-  /**
    * Find existing user by email or create new user
    * @param {Object} value - User data object
    * @returns {Object} User object

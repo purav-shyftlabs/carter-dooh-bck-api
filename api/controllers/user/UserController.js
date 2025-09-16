@@ -39,7 +39,7 @@ module.exports = {
     }
 
     // Get current user to fetch their email
-    const currentUser = await userService.getUserById(userId);
+    const currentUser = await userService.getUserById(userId, null, null, true);
     if (!currentUser) {
       return responseHelper.error(res, 'User not found', 404);
     }
@@ -60,7 +60,7 @@ module.exports = {
     }
 
     // Get current user info
-    const currentUser = await userService.getUserById(userId);
+    const currentUser = await userService.getUserById(userId, null, null, true);
     if (!currentUser) {
       return responseHelper.error(res, 'User not found', 404);
     }
@@ -128,7 +128,7 @@ module.exports = {
     // Get current user context for permission comparison
     const { userId: currentUserId, selectedAccount } = req.user || {};
 
-    const result = await userService.getUserById(userId, currentUserId, selectedAccount);
+    const result = await userService.getUserById(userId, currentUserId, selectedAccount, true);
 
     return responseHelper.success(res, result, 'User fetched successfully');
   }, { action: 'UserController.getUserById' }),
@@ -142,7 +142,7 @@ module.exports = {
     const userId = req.user.userId;
 
     const { userId: currentUserId, selectedAccount } = req.user || {};
-    const result = await userService.getUserById(userId, currentUserId, selectedAccount);
+    const result = await userService.getUserById(userId, currentUserId, selectedAccount, true);
 
     return responseHelper.success(res, result, 'User fetched successfully');
   }, { action: 'UserController.getUserByIdToken' }),
