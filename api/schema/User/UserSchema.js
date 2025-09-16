@@ -9,7 +9,7 @@ const accessLevel = require('../../enums/accessLevel');
 
 // Schema for User model (up to apiKey)
 const createUserSchema = Joi.object({
-  currentAccountId: Joi.number().required(),
+  currentAccountId: Joi.forbidden(),
   name: Joi.string().required(),
   firstName: Joi.string().required(),
   lastName: Joi.string().required(),
@@ -65,3 +65,38 @@ const editUserSchema = Joi.object({
 }).unknown(false);
 
 module.exports.editUserSchema = editUserSchema;
+
+// Schema for getAllUsers query validation
+const allowedSortBy = [
+  'id',
+  'name',
+  'email',
+  'firstName',
+  'lastName',
+  'roleType',
+  'userType',
+  'status', // maps to active
+  'active',
+  'allowAllBrands',
+  'advertisers', // alias transformed in service
+  'role' // alias transformed in service
+];
+
+const getAllUsersQuerySchema = Joi.object({
+  accountId: Joi.alternatives().try(Joi.number(), Joi.string()).optional(),
+  search: Joi.string().allow('').optional(),
+  userRole: Joi.string().valid(...Object.values(roleType)).optional(),
+  userType: Joi.string().valid(...Object.values(userType)).optional(),
+  status: Joi.boolean().optional(),
+  page: Joi.number().integer().min(1).optional(),
+  limit: Joi.number().integer().min(1).max(100).optional(),
+  sortBy: Joi.string().valid(...allowedSortBy).optional(),
+  sortType: Joi.alternatives()
+    .try(
+      Joi.string().valid('asc', 'desc', 'ascending', 'descending'),
+      Joi.number().valid(0, 1)
+    )
+    .optional()
+}).unknown(false);
+
+module.exports.getAllUsersQuerySchema = getAllUsersQuerySchema;

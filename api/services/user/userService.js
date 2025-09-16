@@ -141,19 +141,11 @@ module.exports = {
 
   editUser: async function(userId, updateData, contextAccountId, currentUserId) {
     try {
-      console.log('=== editUser Service ===');
-      console.log('User ID:', userId);
-      console.log('Update Data:', updateData);
-      console.log('Current User ID:', currentUserId);
 
       const numericUserId = Number(userId);
 
       // Strict PATCH: take account from token only
       const targetAccountId = contextAccountId;
-      console.log('Resolved targetAccountId from token:', targetAccountId);
-      if (!targetAccountId && (Object.keys(updateData || {}).length > 0)) {
-        throw errorHelper.createError('Account ID missing from token', 'ACCOUNT_ID_REQUIRED', 400);
-      }
 
       // Prepare update data for models (use Waterline attribute names)
       const userUpdateData = {};

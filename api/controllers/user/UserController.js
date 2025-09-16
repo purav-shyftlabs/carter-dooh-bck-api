@@ -1,319 +1,232 @@
-const { createUserSchema, editUserSchema } = require('../../schema/User/UserSchema');
+const { createUserSchema, editUserSchema, getAllUsersQuerySchema } = require('../../schema/User/UserSchema');
 const userService = require('../../services/user/userService');
 const responseHelper = require('../../utils/responseHelper');
-const errorHelper = require('../../utils/errorHelper');
 const aclCheck = require('../../utils/aclCheck');
 const permissionService = require('../../services/permission/permissionService');
 const AccessLevel = require('../../enums/accessLevel');
 const PermissionType = require('../../enums/permissionType');
 const UserType = require('../../enums/userType');
-const tokenHelper = require('../../utils/tokenHelper');
+const { withController } = require('../../utils/controllerWrapper');
 
 module.exports = {
-  createUser: async (req, res) => {
-    try {
-      // Validate input
-      const value = await createUserSchema.validateAsync(req.body);
-      // Get user info from token (handled by policy)
-      const { userId, selectedAccount } = req.user;
-
-      // fetch user permission
-      const userPermission = await permissionService.getPermissionsByUserId(userId, selectedAccount);
-      // find permission type in userPermission
-      const permissionType = userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT);
-      const user = await userService.getUserById(userId);
-      
-      if (!permissionType) {
-        return responseHelper.error(res, 'Permission type not found', 401);
-      }
-
-      const hasAccess = aclCheck.checkAcl(
-        permissionType.permissionType, 
-        permissionType.accessLevel, 
-        AccessLevel.FULL_ACCESS
-      );
-      
-      // check is user is publisher
-      if (user.userType != UserType.PUBLISHER) {
-        return responseHelper.error(res, 'Advertiser cannot create users', 403);
-      }
-      
-      if (!hasAccess) {
-        return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
-      }
-
-      // Service call
-      const result = await userService.createUser(value);
-
-      // Success response
-      return responseHelper.created(res, result, 'User created successfully');
-
-    } catch (err) {
-      // Custom business error (has statusCode)
-      if (err.statusCode) {
-        return responseHelper.error(res, err.message, err.statusCode, err.details);
-      }
-
-      // Validation error (has errors)
-      if (err.name === 'ValidationError') {
-        return responseHelper.validationError(res, err.details, 'Validation failed');
-      }
-
-      // Log + generic response
-      errorHelper.logError(err, 'UserController.createUser', { body: req.body });
-      return responseHelper.serverError(res, 'An unexpected error occurred');
+  createUser: withController(async (req, res) => {
+    // Validate input
+    const value = await createUserSchema.validateAsync(req.body);
+    // Get user info from token (handled by policy)
+    const { userId, selectedAccount } = req.user || {};
+    if (!userId) {
+      return responseHelper.error(res, 'Unauthorized', 401);
     }
-  },
-
-
-  getUsersByUserId: async (req, res) => {
-    try {
-      // Get user info from token (handled by policy)
-      const { userId } = req.user;
-      if (!userId) {
-        return responseHelper.error(res, 'User ID not found in token', 401);
-      }
-
-      // Get current user to fetch their email
-      const currentUser = await userService.getUserById(userId);
-      if (!currentUser) {
-        return responseHelper.error(res, 'User not found', 404);
-      }
-
-      // Find all users under this email from UserAccount table
-      const result = await userService.getUsersByEmail(currentUser.email);
-      
-      return responseHelper.success(res, result, 'Users fetched successfully');
-    } catch (err) {
-      if (err.statusCode) {
-        return responseHelper.error(res, err.message, err.statusCode, err.details);
-      }
-      errorHelper.logError(err, 'UserController.getUsersByUserId', { user: req.user });
-      return responseHelper.serverError(res, 'An unexpected error occurred');
+    if (!selectedAccount) {
+      return responseHelper.error(res, 'Account ID is required', 400);
     }
-  },
-
-
-  getAllUsers: async (req, res) => {
-    try {
-      console.log('=== getAllUsers Request ===');
-      console.log('Method:', req.method);
-      console.log('URL:', req.url);
-      console.log('Headers:', req.headers);
-      console.log('Query:', req.query);
-      console.log('===========================');
-
-      // Get user info from token (handled by policy)
-      const { userId, selectedAccount } = req.user;
-
-      // Get current user info
-      const currentUser = await userService.getUserById(userId);
-      if (!currentUser) {
-        return responseHelper.error(res, 'User not found', 404);
-      }
-
-      // Check user permissions for USER_MANAGEMENT
-      const userPermission = await permissionService.getPermissionsByUserId(userId, selectedAccount);
-      const permissionType = userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT);
-      
-      if (!permissionType) {
-        return responseHelper.error(res, 'Permission type not found', 401);
-      }
-
-      // Check if user has VIEW_ACCESS or higher for USER_MANAGEMENT
-      const hasAccess = aclCheck.checkAcl(
-        permissionType.permissionType, 
-        permissionType.accessLevel, 
-        AccessLevel.VIEW_ACCESS
-      );
-
-      if (!hasAccess) {
-        return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
-      }
-
-      const {
-        accountId: queryAccountId,
-        search,
-        userRole,
-        userType,
-        status,
-        page,
-        limit,
-        sortBy,
-        sortType
-      } = req.query;
-
-      // Apply user type filtering based on current user's type
-      let allowedUserTypes = [];
-      if (currentUser.userType === UserType.ADVERTISER) {
-        // Advertisers can only see other advertisers
-        allowedUserTypes = [UserType.ADVERTISER];
-      } else if (currentUser.userType === UserType.PUBLISHER) {
-        // Publishers can see both advertisers and publishers
-        allowedUserTypes = [UserType.ADVERTISER, UserType.PUBLISHER];
-      } else {
-        return responseHelper.error(res, 'Invalid user type', 403);
-      }
-
-      const filters = {
-        accountId: queryAccountId,
-        search,
-        userRole,
-        userType: userType || allowedUserTypes, // Use provided userType or default to allowed types
-        status,
-        page: parseInt(page) || 1,
-        limit: parseInt(limit) || 10,
-        sortBy,
-        sortType
-      };
-
-      // If userType is specified in query, validate it's allowed for current user
-      if (userType && !allowedUserTypes.includes(userType)) {
-        return responseHelper.error(res, `You can only view ${allowedUserTypes.join(' and ')} users`, 403);
-      }
-
-      console.log('filters', filters);
-      const result = await userService.getAllUsers(filters);
-      return responseHelper.success(res, result, 'Users fetched successfully');
-    } catch (err) {
-      console.error('getAllUsers Error:', err);
-
-      if (err.statusCode) {
-        errorHelper.logError(err, 'UserController.getAllUsers', { query: req.query });
-        return responseHelper.error(res, err.message, err.statusCode, err.details);
-      }
-
-      return responseHelper.serverError(res, 'An unexpected error occurred');
+    // enforce account from token (schema forbids client-provided)
+    value.currentAccountId = selectedAccount;
+    const user = await userService.getUserById(userId);
+    // check is user is publisher
+    if (user.userType != UserType.PUBLISHER) {
+      return responseHelper.error(res, 'Advertiser cannot create users', 403);
     }
-  },
+    // fetch user permission
+    const userPermission = await permissionService.getPermissionsByUserId(userId, selectedAccount);
+    // find permission type in userPermission
+    const permissionType = Array.isArray(userPermission)
+      ? userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT)
+      : null;
 
-  getUserById: async (req, res) => {
-    try {
-      console.log('=== getUserById Request ===');
-      console.log('Headers:', req.headers);
-      console.log('===========================');
+    const hasAccess = aclCheck.checkAcl(
+      permissionType.permissionType,
+      permissionType.accessLevel,
+      AccessLevel.FULL_ACCESS
+    );
 
-      const userId = req.params.userId;
-      if (!userId) {
-        return responseHelper.error(res, 'User ID is required', 400);
-      }
-
-      // Get current user context for permission comparison
-      const { userId: currentUserId, selectedAccount } = req.user || {};
-
-      console.log('Fetching user with ID:', userId);
-      const result = await userService.getUserById(userId, currentUserId, selectedAccount);
-      console.log('User result:', result);
-
-      return responseHelper.success(res, result, 'User fetched successfully');
-    } catch (err) {
-      console.error('getUserById Error:', err);
-
-      if (err.statusCode) {
-        return responseHelper.error(res, err.message, err.statusCode, err.details);
-      }
-
-      errorHelper.logError(err, 'UserController.getUserById', { headers: req.headers });
-      return responseHelper.serverError(res, 'An unexpected error occurred');
+    if (!hasAccess) {
+      return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
     }
-  },
 
-  getUserByIdToken: async (req, res) => {
-    try {
-      console.log('=== getUserByIdToken Request ===');
-      console.log('Headers:', req.headers);
-      console.log('===========================');
+    // Service call
+    const result = await userService.createUser(value);
 
-      // Get user info from token (handled by policy)
-      // Get current user context for permission comparison
-      // get user id from token
-      const userId = req.user.userId;
+    // Success response
+    return responseHelper.created(res, result, 'User created successfully');
+  }, { action: 'UserController.createUser' }),
 
-      const { userId: currentUserId, selectedAccount } = req.user || {};
-      console.log('Fetching user with ID:', userId);
-      const result = await userService.getUserById(userId, currentUserId, selectedAccount);
-      console.log('User result:', result);
 
-      return responseHelper.success(res, result, 'User fetched successfully');
-    } catch (err) {
-      console.error('getUserByIdToken Error:', err);
-
-      if (err.statusCode) {
-        return responseHelper.error(res, err.message, err.statusCode, err.details);
-      }
-
-      errorHelper.logError(err, 'UserController.getUserByIdToken', { headers: req.headers });
-      return responseHelper.serverError(res, 'An unexpected error occurred');
+  getUsersByUserId: withController(async (req, res) => {
+    // Get user info from token (handled by policy)
+    const { userId } = req.user;
+    if (!userId) {
+      return responseHelper.error(res, 'User ID not found in token', 401);
     }
-  },
 
-  editUser: async (req, res) => {
-    try {
-      console.log('=== editUser Request ===');
-      console.log('Method:', req.method);
-      console.log('URL:', req.url);
-      console.log('Headers:', req.headers);
-      console.log('Params:', req.params);
-      console.log('Body:', req.body);
-      console.log('===========================');
-
-      const userId = req.params.userId;
-      if (!userId) {
-        return responseHelper.error(res, 'User ID is required', 400);
-      }
-
-      // Get user info from token (handled by policy)
-      const { userId: currentUserId, selectedAccount } = req.user;
-      console.log('selectedAccount', selectedAccount);
-      console.log('currentUserId', currentUserId);
-      console.log(req.user,'req.user');
-      // Check user permissions for USER_MANAGEMENT
-      const userPermission = await permissionService.getPermissionsByUserId(currentUserId, selectedAccount);
-      const permissionType = userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT);
-      
-      if (!permissionType) {
-        return responseHelper.error(res, 'Permission type not found', 401);
-      }
-
-      // Check if user has FULL_ACCESS for USER_MANAGEMENT to edit users
-      const hasAccess = aclCheck.checkAcl(
-        permissionType.permissionType, 
-        permissionType.accessLevel, 
-        AccessLevel.FULL_ACCESS
-      );
-
-      if (!hasAccess) {
-        return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
-      }
-      if(!selectedAccount) {
-        return responseHelper.error(res, 'Account ID is required Buddy', 400);
-      }
-
-      // Validate input against edit schema (all fields optional)
-      const value = await editUserSchema.validateAsync(req.body);
-      console.log('Editing user with ID:', userId);
-      const result = await userService.editUser(userId, value, selectedAccount, currentUserId);
-      console.log('Edit user result:', result);
-
-      return responseHelper.success(res, result, 'User updated successfully');
-    } catch (err) {
-      console.error('editUser Error:', err);
-
-      // Validation error (has errors)
-      if (err.name === 'ValidationError') {
-        return responseHelper.validationError(res, err.details, 'Validation failed');
-      }
-
-      if (err.statusCode) {
-        return responseHelper.error(res, err.message, err.statusCode, err.details);
-      }
-
-      errorHelper.logError(err, 'UserController.editUser', { 
-        params: req.params, 
-        body: req.body, 
-        headers: req.headers 
-      });
-      return responseHelper.serverError(res, 'An unexpected error occurred');
+    // Get current user to fetch their email
+    const currentUser = await userService.getUserById(userId);
+    if (!currentUser) {
+      return responseHelper.error(res, 'User not found', 404);
     }
-  }
+
+    // Find all users under this email from UserAccount table
+    const result = await userService.getUsersByEmail(currentUser.email);
+
+    return responseHelper.success(res, result, 'Users fetched successfully');
+  }, { action: 'UserController.getUsersByUserId' }),
+
+
+  getAllUsers: withController(async (req, res) => {
+
+    // Get user info from token (handled by policy)
+    const { userId, selectedAccount } = req.user || {};
+    if (!userId) {
+      return responseHelper.error(res, 'Unauthorized', 401);
+    }
+
+    // Get current user info
+    const currentUser = await userService.getUserById(userId);
+    if (!currentUser) {
+      return responseHelper.error(res, 'User not found', 404);
+    }
+
+    // Check user permissions for USER_MANAGEMENT
+    const userPermission = await permissionService.getPermissionsByUserId(userId, selectedAccount);
+    const permissionType = Array.isArray(userPermission)
+      ? userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT)
+      : null;
+
+    if (!permissionType) {
+      return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
+    }
+
+    // Check if user has VIEW_ACCESS or higher for USER_MANAGEMENT
+    const hasAccess = aclCheck.checkAcl(
+      permissionType.permissionType,
+      permissionType.accessLevel,
+      AccessLevel.VIEW_ACCESS
+    );
+
+    if (!hasAccess) {
+      return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
+    }
+
+    // Validate and normalize query
+    const {
+      accountId: queryAccountId,
+      search,
+      userRole,
+      userType,
+      status,
+      page,
+      limit,
+      sortBy,
+      sortType
+    } = await getAllUsersQuerySchema.validateAsync(req.query);
+
+    // Apply user type filtering based on current user's type
+    let allowedUserTypes = [];
+    if (currentUser.userType === UserType.ADVERTISER) {
+      // Advertisers can only see other advertisers
+      allowedUserTypes = [UserType.ADVERTISER];
+    } else if (currentUser.userType === UserType.PUBLISHER) {
+      // Publishers can see both advertisers and publishers
+      allowedUserTypes = [UserType.ADVERTISER, UserType.PUBLISHER];
+    } else {
+      return responseHelper.error(res, 'Invalid user type', 403);
+    }
+
+    const resolvedAccountId = queryAccountId || selectedAccount;
+    if (!resolvedAccountId) {
+      return responseHelper.error(res, 'Account ID is required', 400);
+    }
+
+    const filters = {
+      accountId: resolvedAccountId,
+      search,
+      userRole,
+      userType: userType || allowedUserTypes, // service expects string; fallback to allowed types
+      status,
+      page: parseInt(page, 10) || 1,
+      limit: parseInt(limit, 10) || 10,
+      sortBy,
+      sortType
+    };
+
+    // If userType is specified in query, validate it's allowed for current user
+    if (userType && !allowedUserTypes.includes(userType)) {
+      return responseHelper.error(res, `You can only view ${allowedUserTypes.join(' and ')} users`, 403);
+    }
+
+    const result = await userService.getAllUsers(filters);
+    return responseHelper.success(res, result, 'Users fetched successfully');
+  }, { action: 'UserController.getAllUsers' }),
+
+  getUserById: withController(async (req, res) => {
+
+    const userId = req.params.userId;
+    if (!userId) {
+      return responseHelper.error(res, 'User ID is required', 400);
+    }
+
+    // Get current user context for permission comparison
+    const { userId: currentUserId, selectedAccount } = req.user || {};
+
+    const result = await userService.getUserById(userId, currentUserId, selectedAccount);
+
+    return responseHelper.success(res, result, 'User fetched successfully');
+  }, { action: 'UserController.getUserById' }),
+
+  getUserByIdToken: withController(async (req, res) => {
+    // Get user info from token (handled by policy)
+    if (!req.user || !req.user.userId) {
+      return responseHelper.error(res, 'Unauthorized', 401);
+    }
+    // get user id from token
+    const userId = req.user.userId;
+
+    const { userId: currentUserId, selectedAccount } = req.user || {};
+    const result = await userService.getUserById(userId, currentUserId, selectedAccount);
+
+    return responseHelper.success(res, result, 'User fetched successfully');
+  }, { action: 'UserController.getUserByIdToken' }),
+
+  editUser: withController(async (req, res) => {
+
+    const userId = req.params.userId;
+    if (!userId) {
+      return responseHelper.error(res, 'User ID is required', 400);
+    }
+
+    // Get user info from token (handled by policy)
+    const { userId: currentUserId, selectedAccount } = req.user || {};
+    if (!currentUserId) {
+      return responseHelper.error(res, 'Unauthorized', 401);
+    }
+    // Check user permissions for USER_MANAGEMENT
+    const userPermission = await permissionService.getPermissionsByUserId(currentUserId, selectedAccount);
+    const permissionType = Array.isArray(userPermission)
+      ? userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT)
+      : null;
+
+    if (!permissionType) {
+      return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
+    }
+
+    // Check if user has FULL_ACCESS for USER_MANAGEMENT to edit users
+    const hasAccess = aclCheck.checkAcl(
+      permissionType.permissionType,
+      permissionType.accessLevel,
+      AccessLevel.FULL_ACCESS
+    );
+
+    if (!hasAccess) {
+      return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
+    }
+    if (!selectedAccount) {
+      return responseHelper.error(res, 'Account ID is required', 400);
+    }
+
+    // Validate input against edit schema (all fields optional)
+    const value = await editUserSchema.validateAsync(req.body);
+    const result = await userService.editUser(userId, value, selectedAccount, currentUserId);
+
+    return responseHelper.success(res, result, 'User updated successfully');
+  }, { action: 'UserController.editUser' })
 };
