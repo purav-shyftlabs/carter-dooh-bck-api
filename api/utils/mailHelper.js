@@ -73,8 +73,8 @@ const sendPasswordResetEmail = async (user, account, resetToken) => {
   }
 
   // Generate reset URL (you may need to adjust the base URL)
-  const baseUrl = process.env.BASE_URL || 'http://localhost:1337';
-  const resetUrl = `${baseUrl}/auth/reset-password?token=${resetToken}`;
+  const baseUrl = 'http://localhost:3000';
+  const resetUrl = `${baseUrl}/auth/set-password?token=${resetToken}`;
 
   const mailOptions = {
     from: `"${account.name}" <${process.env.FROM_EMAIL || process.env.SMTP_USER || 'noreply@example.com'}>`,

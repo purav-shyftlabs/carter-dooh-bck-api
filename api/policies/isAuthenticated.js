@@ -5,6 +5,7 @@
 
 const jwt = require('jsonwebtoken');
 const responseHelper = require('../utils/responseHelper');
+const tokenHelper = require('../utils/tokenHelper');
 
 module.exports = async function(req, res, next) {
   try {
@@ -17,17 +18,11 @@ module.exports = async function(req, res, next) {
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     
-    // Verify and decode JWT token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
+    // Use token helper to normalize payload (selectedAccount, role mapping, etc.)
+    const payload = tokenHelper.getTokenPayload(req);
     
     // Add user info to request object
-    req.user = {
-      userId: decoded.userId,
-      accountId: decoded.accountId,
-      email: decoded.email,
-      userType: decoded.userType,
-      token: token
-    };
+    req.user = payload;
     
     // Continue to next middleware/action
     return next();

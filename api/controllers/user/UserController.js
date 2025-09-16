@@ -1,4 +1,4 @@
-const { createUserSchema } = require('../../schema/User/UserSchema');
+const { createUserSchema, editUserSchema } = require('../../schema/User/UserSchema');
 const userService = require('../../services/user/userService');
 const responseHelper = require('../../utils/responseHelper');
 const errorHelper = require('../../utils/errorHelper');
@@ -15,10 +15,10 @@ module.exports = {
       // Validate input
       const value = await createUserSchema.validateAsync(req.body);
       // Get user info from token (handled by policy)
-      const { userId, accountId } = req.user;
+      const { userId, selectedAccount } = req.user;
 
       // fetch user permission
-      const userPermission = await permissionService.getPermissionsByUserId(userId, accountId);
+      const userPermission = await permissionService.getPermissionsByUserId(userId, selectedAccount);
       // find permission type in userPermission
       const permissionType = userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT);
       const user = await userService.getUserById(userId);
@@ -104,7 +104,7 @@ module.exports = {
       console.log('===========================');
 
       // Get user info from token (handled by policy)
-      const { userId, accountId } = req.user;
+      const { userId, selectedAccount } = req.user;
 
       // Get current user info
       const currentUser = await userService.getUserById(userId);
@@ -113,7 +113,7 @@ module.exports = {
       }
 
       // Check user permissions for USER_MANAGEMENT
-      const userPermission = await permissionService.getPermissionsByUserId(userId, accountId);
+      const userPermission = await permissionService.getPermissionsByUserId(userId, selectedAccount);
       const permissionType = userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT);
       
       if (!permissionType) {
@@ -199,10 +199,10 @@ module.exports = {
       }
 
       // Get current user context for permission comparison
-      const { userId: currentUserId, accountId } = req.user || {};
+      const { userId: currentUserId, selectedAccount } = req.user || {};
 
       console.log('Fetching user with ID:', userId);
-      const result = await userService.getUserById(userId, currentUserId, accountId);
+      const result = await userService.getUserById(userId, currentUserId, selectedAccount);
       console.log('User result:', result);
 
       return responseHelper.success(res, result, 'User fetched successfully');
@@ -229,9 +229,9 @@ module.exports = {
       // get user id from token
       const userId = req.user.userId;
 
-      const { userId: currentUserId, accountId } = req.user || {};
+      const { userId: currentUserId, selectedAccount } = req.user || {};
       console.log('Fetching user with ID:', userId);
-      const result = await userService.getUserById(userId, currentUserId, accountId);
+      const result = await userService.getUserById(userId, currentUserId, selectedAccount);
       console.log('User result:', result);
 
       return responseHelper.success(res, result, 'User fetched successfully');
@@ -263,10 +263,12 @@ module.exports = {
       }
 
       // Get user info from token (handled by policy)
-      const { userId: currentUserId, accountId } = req.user;
-
+      const { userId: currentUserId, selectedAccount } = req.user;
+      console.log('selectedAccount', selectedAccount);
+      console.log('currentUserId', currentUserId);
+      console.log(req.user,'req.user');
       // Check user permissions for USER_MANAGEMENT
-      const userPermission = await permissionService.getPermissionsByUserId(currentUserId, accountId);
+      const userPermission = await permissionService.getPermissionsByUserId(currentUserId, selectedAccount);
       const permissionType = userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT);
       
       if (!permissionType) {
@@ -283,14 +285,24 @@ module.exports = {
       if (!hasAccess) {
         return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
       }
+      if(!selectedAccount) {
+        return responseHelper.error(res, 'Account ID is required Buddy', 400);
+      }
 
+      // Validate input against edit schema (all fields optional)
+      const value = await editUserSchema.validateAsync(req.body);
       console.log('Editing user with ID:', userId);
-      const result = await userService.editUser(userId, req.body, accountId, currentUserId);
+      const result = await userService.editUser(userId, value, selectedAccount, currentUserId);
       console.log('Edit user result:', result);
 
       return responseHelper.success(res, result, 'User updated successfully');
     } catch (err) {
       console.error('editUser Error:', err);
+
+      // Validation error (has errors)
+      if (err.name === 'ValidationError') {
+        return responseHelper.validationError(res, err.details, 'Validation failed');
+      }
 
       if (err.statusCode) {
         return responseHelper.error(res, err.message, err.statusCode, err.details);

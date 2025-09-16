@@ -25,9 +25,9 @@ function getTokenPayload(req) {
   
   return {
     userId: decoded.userId,
-    accountId: decoded.accountId,
+    selectedAccount: decoded.selectedAccount,
     email: decoded.email,
-    userType: decoded.userType,
+    userType: decoded.role,
     token: token
   };
 }

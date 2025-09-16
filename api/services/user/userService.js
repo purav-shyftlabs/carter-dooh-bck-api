@@ -148,37 +148,11 @@ module.exports = {
 
       const numericUserId = Number(userId);
 
-      // Validate that user exists
-      const user = await User.findOne({ id: numericUserId });
-      if (!user) {
-        throw errorHelper.createError('User not found', 'USER_NOT_FOUND', 404);
-      }
-
-      // Resolve target account: prefer contextAccountId from token; fallback to user's currentAccountId
-      const targetAccountId = contextAccountId || user.currentAccountId;
-
-      // Get user account for the target account
-      const userAccount = await UserAccount.findOne({ userId: numericUserId, accountId: targetAccountId });
-      if (!userAccount) {
-        throw errorHelper.createError('User account not found', 'USER_ACCOUNT_NOT_FOUND', 404);
-      }
-
-      // Check if current user has permission to edit user (moved from controller for consistency)
-      if (currentUserId) {
-        const currentUserPermission = await UserPermission.findOne({ userId: currentUserId, accountId: targetAccountId, permissionType: PermissionType.USER_MANAGEMENT });
-        if (!currentUserPermission) {
-          throw errorHelper.createError('Current user permission not found', 'CURRENT_USER_PERMISSION_NOT_FOUND', 404);
-        }
-        
-        // Check if current user has permission of full access to edit user
-        const hasFullAccess = aclCheck.checkAcl(
-          currentUserPermission.permissionType, 
-          currentUserPermission.accessLevel, 
-          AccessLevel.FULL_ACCESS
-        );
-        if (!hasFullAccess) {
-          throw errorHelper.createError('Current user does not have permission to edit user', 'INSUFFICIENT_PERMISSIONS', 403);
-        }
+      // Strict PATCH: take account from token only
+      const targetAccountId = contextAccountId;
+      console.log('Resolved targetAccountId from token:', targetAccountId);
+      if (!targetAccountId && (Object.keys(updateData || {}).length > 0)) {
+        throw errorHelper.createError('Account ID missing from token', 'ACCOUNT_ID_REQUIRED', 400);
       }
 
       // Prepare update data for models (use Waterline attribute names)
@@ -207,42 +181,48 @@ module.exports = {
         await User.updateOne({ id: numericUserId }).set(userUpdateData);
       }
 
-      // Update UserAccount if needed
-      if (Object.keys(userAccountUpdateData).length > 0) {
+      // Update UserAccount if needed (only if we have an account context)
+      if (targetAccountId && Object.keys(userAccountUpdateData).length > 0) {
         await UserAccount.updateOne({ userId: numericUserId, accountId: targetAccountId }).set(userAccountUpdateData);
       }
 
-      // Update permissions if provided (replace strategy for current account)
-      if (Array.isArray(updateData.permissions)) {
-        // Basic validation
-        for (const perm of updateData.permissions) {
-          if (!perm || !perm.permissionType || !perm.accessLevel) {
-            throw errorHelper.createError(
-              'Each permission must include permissionType and accessLevel',
-              'INVALID_PERMISSION',
-              400
-            );
-          }
-        }
+      // Update permissions if provided (upsert only provided permissions; do not delete others)
+      if (targetAccountId && Array.isArray(updateData.permissions)) {
+        for (const p of updateData.permissions) {
+          if (!p) continue;
+          const permissionType = p.permissionType ? String(p.permissionType).toUpperCase() : null;
+          const accessLevel = p.accessLevel ? String(p.accessLevel).toUpperCase() : null;
+          if (!permissionType || !accessLevel) continue;
 
-        // Remove existing permissions for this user and account
-        await UserPermission.destroy({ userId: numericUserId, accountId: targetAccountId });
-
-        // Create new permissions
-        if (updateData.permissions.length > 0) {
-          const rows = updateData.permissions.map(p => ({
+          const updated = await UserPermission.updateOne({
             userId: numericUserId,
             accountId: targetAccountId,
-            permissionType: String(p.permissionType).toUpperCase(),
-            accessLevel: String(p.accessLevel).toUpperCase()
-          }));
-          await UserPermission.createEach(rows);
+            permissionType
+          }).set({ accessLevel });
+
+          if (!updated) {
+            await UserPermission.create({
+              userId: numericUserId,
+              accountId: targetAccountId,
+              permissionType,
+              accessLevel
+            });
+          }
         }
       }
 
-      // Return updated user via service
-      const updatedUser = await this.getUserById(numericUserId);
-      return updatedUser;
+      // Return updated user so caller immediately sees changes
+      try {
+        const updatedUser = await this.getUserById(numericUserId, currentUserId, targetAccountId);
+        return updatedUser;
+      } catch (e) {
+        // If fetch fails, fall back to minimal confirmation
+        return {
+          id: numericUserId,
+          accountId: targetAccountId || null,
+          updated: true
+        };
+      }
     } catch (error) {
       console.error('Edit user error:', error);
       throw error.statusCode ? error : errorHelper.handleDatabaseError(error, 'update', 'User');
