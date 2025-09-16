@@ -139,11 +139,12 @@ module.exports = {
     }
   },
 
-  editUser: async function(userId, updateData, contextAccountId) {
+  editUser: async function(userId, updateData, contextAccountId, currentUserId) {
     try {
       console.log('=== editUser Service ===');
       console.log('User ID:', userId);
       console.log('Update Data:', updateData);
+      console.log('Current User ID:', currentUserId);
 
       const numericUserId = Number(userId);
 
@@ -162,20 +163,22 @@ module.exports = {
         throw errorHelper.createError('User account not found', 'USER_ACCOUNT_NOT_FOUND', 404);
       }
 
-      // check if user has permission to edit user
-      const userPermission = await UserPermission.findOne({ userId: numericUserId, accountId: targetAccountId, permissionType: PermissionType.USER_MANAGEMENT });
-      if (!userPermission) {
-        throw errorHelper.createError('User permission not found', 'USER_PERMISSION_NOT_FOUND', 404);
-      }
-      
-      // check if user has permission of full access to edit user
-      const hasFullAccess = aclCheck.checkAcl(
-        userPermission.permissionType, 
-        userPermission.accessLevel, 
-        AccessLevel.FULL_ACCESS
-      );
-      if (!hasFullAccess) {
-        throw errorHelper.createError('User does not have permission to edit user', 'USER_PERMISSION_NOT_FOUND', 404);
+      // Check if current user has permission to edit user (moved from controller for consistency)
+      if (currentUserId) {
+        const currentUserPermission = await UserPermission.findOne({ userId: currentUserId, accountId: targetAccountId, permissionType: PermissionType.USER_MANAGEMENT });
+        if (!currentUserPermission) {
+          throw errorHelper.createError('Current user permission not found', 'CURRENT_USER_PERMISSION_NOT_FOUND', 404);
+        }
+        
+        // Check if current user has permission of full access to edit user
+        const hasFullAccess = aclCheck.checkAcl(
+          currentUserPermission.permissionType, 
+          currentUserPermission.accessLevel, 
+          AccessLevel.FULL_ACCESS
+        );
+        if (!hasFullAccess) {
+          throw errorHelper.createError('Current user does not have permission to edit user', 'INSUFFICIENT_PERMISSIONS', 403);
+        }
       }
 
       // Prepare update data for models (use Waterline attribute names)

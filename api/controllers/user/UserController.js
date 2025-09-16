@@ -285,7 +285,7 @@ module.exports = {
       }
 
       console.log('Editing user with ID:', userId);
-      const result = await userService.editUser(userId, req.body, accountId);
+      const result = await userService.editUser(userId, req.body, accountId, currentUserId);
       console.log('Edit user result:', result);
 
       return responseHelper.success(res, result, 'User updated successfully');
