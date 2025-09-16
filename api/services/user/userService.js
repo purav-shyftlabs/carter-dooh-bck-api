@@ -2,6 +2,9 @@ const errorHelper = require('../../utils/errorHelper');
 const utilityHelper = require('../../utils/utilityHelper');
 const scheduler = require('../../utils/scheduler');
 const userHelper = require('./helper');
+const PermissionType = require('../../enums/permissionType');
+const AccessLevel = require('../../enums/accessLevel');
+const aclCheck = require('../../utils/aclCheck');
 
 // SQL Template references for better organization
 const sqlTemplates = sails.config.globals.sqlTemplates;
@@ -159,6 +162,22 @@ module.exports = {
         throw errorHelper.createError('User account not found', 'USER_ACCOUNT_NOT_FOUND', 404);
       }
 
+      // check if user has permission to edit user
+      const userPermission = await UserPermission.findOne({ userId: numericUserId, accountId: targetAccountId, permissionType: PermissionType.USER_MANAGEMENT });
+      if (!userPermission) {
+        throw errorHelper.createError('User permission not found', 'USER_PERMISSION_NOT_FOUND', 404);
+      }
+      
+      // check if user has permission of full access to edit user
+      const hasFullAccess = aclCheck.checkAcl(
+        userPermission.permissionType, 
+        userPermission.accessLevel, 
+        AccessLevel.FULL_ACCESS
+      );
+      if (!hasFullAccess) {
+        throw errorHelper.createError('User does not have permission to edit user', 'USER_PERMISSION_NOT_FOUND', 404);
+      }
+
       // Prepare update data for models (use Waterline attribute names)
       const userUpdateData = {};
       const userAccountUpdateData = {};
@@ -297,6 +316,8 @@ module.exports = {
 
       // Determine sorting from sortBy and sortType
       let sortColumn = sortBy ? String(sortBy) : null;
+      sortColumn == "role" ? sortColumn = "roleType" : sortColumn == "advertisers" ? sortColumn = "allowAllBrands" : sortColumn;
+      console.log('sortColumn', sortColumn);
       let sortAsc = true; // default ascending
       if (sortType !== undefined && sortType !== null) {
         const st = String(sortType).toLowerCase();

@@ -225,7 +225,7 @@ module.exports = {
       console.log('===========================');
 
       // Get user info from token (handled by policy)
-  // Get current user context for permission comparison
+      // Get current user context for permission comparison
       // get user id from token
       const userId = req.user.userId;
 
