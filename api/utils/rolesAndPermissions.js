@@ -3,7 +3,7 @@ const PermissionType = require('../enums/permissionType');
 const AccessLevel = require('../enums/accessLevel');
 
 
-const standardUserPermissions = {
+const operatorUserPermissions = {
     // [PermissionType.AD_INVENTORY_PLACEMENTS]: AccessLevel.VIEW_ACCESS,
     // [PermissionType.AUDIENCE_KEYS_VALUES]: AccessLevel.VIEW_ACCESS,
     // [PermissionType.ALL_PUBLISHER_CAMPAIGNS]: AccessLevel.VIEW_ACCESS,
@@ -20,7 +20,7 @@ const standardUserPermissions = {
     // [PermissionType.YIELD_MANAGEMENT]: AccessLevel.NO_ACCESS,
 }
 
-const adminUserPermissions = {
+    const adminUserPermissions = {
     // [PermissionType.AD_INVENTORY_PLACEMENTS]: AccessLevel.FULL_ACCESS,
     // [PermissionType.AUDIENCE_KEYS_VALUES]: AccessLevel.FULL_ACCESS,
     // [PermissionType.ALL_PUBLISHER_CAMPAIGNS]: AccessLevel.FULL_ACCESS,
@@ -37,4 +37,4 @@ const adminUserPermissions = {
     // [PermissionType.YIELD_MANAGEMENT]: AccessLevel.FULL_ACCESS,
 }
 
-module.exports = { standardUserPermissions, adminUserPermissions };
+module.exports = { operatorUserPermissions, adminUserPermissions };

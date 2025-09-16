@@ -60,12 +60,12 @@ module.exports = {
             accountId
           );
           
-          formattedUser.showStandard = comparison.showStandard;
+          formattedUser.showOperator = comparison.showOperator;
           formattedUser.showAdmin = comparison.showAdmin;
         } catch (permErr) {
           console.warn('Permission comparison failed:', permErr);
           // Don't fail the whole request if permission comparison fails
-          formattedUser.showStandard = false;
+          formattedUser.showOperator = false;
           formattedUser.showAdmin = false;
         }
       }
@@ -219,14 +219,17 @@ module.exports = {
     try {
       // context: { currentUserId, accountId }
       const { currentUserId, accountId } = context || {};
+      console.log(currentUserId, accountId,'currentUserId and accountId');
+      if (currentUserId !== null && accountId !== null) {
       await userHelper.validateUserPermission(currentUserId, accountId, PermissionType.USER_MANAGEMENT, AccessLevel.FULL_ACCESS);
       // Ensure only publishers can create users
-      const currentUser = await this.getUserById(currentUserId);
-      userHelper.ensurePublisherUser(currentUser);
+        const currentUser = await this.getUserById(currentUserId, null, accountId, true);
+        userHelper.ensurePublisherUser(currentUser);
+      }
       // Force account to context account
       value.currentAccountId = accountId;
       await userHelper.validateAccount(value.currentAccountId);
-      userHelper.validateBrandsConfiguration(value);
+      // userHelper.validateBrandsConfiguration(value);
           
       const user = await userHelper.findOrCreateUser(value);
       await userHelper.validateUserAccountUniqueness(user.id, value.currentAccountId);
@@ -286,11 +289,11 @@ module.exports = {
       if (userType) {
         userAccountWhere.userType = String(userType).toUpperCase();
       }
-      if (status) {
+      if (status == true || status == false) {
         userAccountWhere.active = status;
       }
       // Only apply status filter if the attribute exists on the model
-      if (status && UserAccount && UserAccount.attributes && UserAccount.attributes.status) {
+      if (status == true || status == false && UserAccount && UserAccount.attributes && UserAccount.attributes.status) {
         userAccountWhere.active = status;
       }
 

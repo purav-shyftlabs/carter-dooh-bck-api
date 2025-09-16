@@ -11,9 +11,10 @@ const { withController } = require('../../utils/controllerWrapper');
 module.exports = {
   createUser: withController(async (req, res) => {
     // Validate input
-    const value = await createUserSchema.validateAsync(req.body);
+    // const value = await createUserSchema.validateAsync(req.body);
     // Get user info from token (handled by policy)
-    const { userId, selectedAccount } = req.user || {};
+    const value = req.body;
+    const { userId, selectedAccount } = req.user;
     if (!userId) {
       return responseHelper.error(res, 'Unauthorized', 401);
     }

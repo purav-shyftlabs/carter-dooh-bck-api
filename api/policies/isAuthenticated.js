@@ -11,7 +11,6 @@ module.exports = async function(req, res, next) {
   try {
     // Extract JWT token from Authorization header
     const authHeader = req.headers.authorization;
-    
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return responseHelper.error(res, 'Authorization header missing or invalid', 401);
     }

@@ -156,7 +156,7 @@ const generateWelcomeEmailHTML = (user, account) => {
             <li><strong>Name:</strong> ${user.name}</li>
             <li><strong>Email:</strong> ${user.email}</li>
             <li><strong>Account:</strong> ${account.name}</li>
-            <li><strong>User Type:</strong> ${user.userType || 'Standard'}</li>
+            <li><strong>User Type:</strong> ${user.userType || 'Operator'}</li>
           </ul>
           <p>You can now log in to your account and start using our platform.</p>
           <p>If you have any questions, please don't hesitate to contact our support team.</p>
@@ -188,7 +188,7 @@ Your account has been successfully created with the following details:
 - Name: ${user.name}
 - Email: ${user.email}
 - Account: ${account.name}
-- User Type: ${user.userType || 'Standard'}
+- User Type: ${user.userType || 'Operator'}
 
 You can now log in to your account and start using our platform.
 

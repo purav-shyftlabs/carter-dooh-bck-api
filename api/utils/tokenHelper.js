@@ -13,7 +13,7 @@ const jwt = require('jsonwebtoken');
 function getTokenPayload(req) {
   // Extract JWT token from Authorization header
   const authHeader = req.headers.authorization;
-  
+    console.log(authHeader,'authHeader is here');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     throw new Error('Authorization header missing or invalid');
   }
@@ -22,7 +22,7 @@ function getTokenPayload(req) {
   
   // Verify and decode JWT token
   const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret');
-  
+  console.log('decoded', decoded);
   return {
     userId: decoded.userId,
     selectedAccount: decoded.selectedAccount,

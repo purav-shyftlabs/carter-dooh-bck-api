@@ -1,7 +1,7 @@
 const AccessLevel = require('../../enums/accessLevel');
 const PermissionType = require('../../enums/permissionType');
 const aclCheck = require('../../utils/aclCheck');
-const { standardUserPermissions, adminUserPermissions } = require('../../utils/rolesAndPermissions');
+const { operatorUserPermissions, adminUserPermissions } = require('../../utils/rolesAndPermissions');
 
 function toPermissionMap(permissions) {
   const map = {};
@@ -18,9 +18,9 @@ module.exports = {
     },
 
     /**
-     * Check if current user can assign Standard or Admin roles.
+      * Check if current user can assign Operator or Admin roles.
      * Returns flags:
-     * - showStandard: true if current user has sufficient permissions to assign Standard role
+     * - showOperator: true if current user has sufficient permissions to assign Operator role
      * - showAdmin: true if current user has sufficient permissions to assign Admin role
      * Logic: If current user has ANY permission lower than the role defaults, they cannot assign that role.
      */
@@ -28,13 +28,13 @@ module.exports = {
       const currentPerms = await UserPermission.find({ userId: currentUserId, accountId });
       const currentMap = toPermissionMap(currentPerms);
 
-      let showStandard = true;
+      let showOperator = true;
       let showAdmin = true;
       const diffs = [];
 
       // Get all permission types from both role defaults only
       const allPermissionTypes = new Set([
-        ...Object.keys(standardUserPermissions),
+        ...Object.keys(operatorUserPermissions),
         ...Object.keys(adminUserPermissions)
       ]);
 
@@ -42,26 +42,26 @@ module.exports = {
         console.log('\n\n\n\********* permissionType **********', permissionType);
         const currentLevel = currentMap[permissionType] || AccessLevel.NO_ACCESS;
         console.log('currentLevel', currentLevel);
-        // Check against Standard role defaults
-        const standardDefaultLevel = standardUserPermissions[permissionType];
-        console.log('standardDefaultLevel', standardDefaultLevel);
+        // Check against Operator role defaults
+        const operatorDefaultLevel = operatorUserPermissions[permissionType];
+        console.log('operatorDefaultLevel', operatorDefaultLevel);
         
         // Check against Admin role defaults
         const adminDefaultLevel = adminUserPermissions[permissionType];
         console.log('adminDefaultLevel', adminDefaultLevel);
 
         // Skip if permission type is not defined in role defaults
-        if (!standardDefaultLevel && !adminDefaultLevel) {
+        if (!operatorDefaultLevel && !adminDefaultLevel) {
           console.log('Skipping permission type not found in role defaults:', permissionType);
           continue;
         }
-        // Check Standard role only if it's defined
-        if (standardDefaultLevel) {
-          const currentCanAssignStandard = aclCheck.checkAcl(permissionType, currentLevel, standardDefaultLevel);
-          if (!currentCanAssignStandard) {
-            showStandard = false;
+        // Check Operator role only if it's defined
+        if (operatorDefaultLevel) {
+          const currentCanAssignOperator = aclCheck.checkAcl(permissionType, currentLevel, operatorDefaultLevel);
+          if (!currentCanAssignOperator) {
+            showOperator = false;
           }
-          console.log('currentCanAssignStandard', currentCanAssignStandard);
+          console.log('currentCanAssignOperator', currentCanAssignOperator);
         }
 
         // Check Admin role only if it's defined
@@ -73,24 +73,24 @@ module.exports = {
           console.log('currentCanAssignAdmin', currentCanAssignAdmin);
         }
         // Track differences for debugging
-        const blocksStandard = standardDefaultLevel && !aclCheck.checkAcl(permissionType, currentLevel, standardDefaultLevel);
+        const blocksOperator = operatorDefaultLevel && !aclCheck.checkAcl(permissionType, currentLevel, operatorDefaultLevel);
         const blocksAdmin = adminDefaultLevel && !aclCheck.checkAcl(permissionType, currentLevel, adminDefaultLevel);
         
-        if (blocksStandard || blocksAdmin) {
+        if (blocksOperator || blocksAdmin) {
           diffs.push({ 
             permissionType, 
             currentLevel, 
-            standardDefaultLevel,
+            operatorDefaultLevel,
             adminDefaultLevel,
-            blocksStandard,
+            blocksOperator,
             blocksAdmin
           });
         }
       }
-      console.log('showStandard', showStandard);
+      console.log('showOperator', showOperator);
       console.log('showAdmin', showAdmin);
       console.log('diffs', diffs);  
-      return { showStandard, showAdmin, diffs };
+      return { showOperator, showAdmin, diffs };
     },
 
     /**

@@ -21,9 +21,10 @@ module.exports = {
    * Validate a user's permission against required access
    */
   validateUserPermission: async function(userId, accountId, permissionType, requiredAccessLevel) {
-    if (!userId) {
-      throw errorHelper.createError('Unauthorized', 'UNAUTHORIZED', 401);
-    }
+    console.log(userId, accountId, permissionType, requiredAccessLevel,'userId, accountId, permissionType, requiredAccessLevel');
+    // if (!userId) {
+    //   throw errorHelper.createError('Unauthorized', 'UNAUTHORIZED', 401);
+    // }
     if (!accountId) {
       throw errorHelper.createError('Account ID is required', 'ACCOUNT_ID_REQUIRED', 400);
     }
