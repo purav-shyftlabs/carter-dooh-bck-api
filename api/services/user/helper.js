@@ -3,9 +3,9 @@ const scheduler = require('../../utils/scheduler');
 const jwt = require('jsonwebtoken');
 const permissionService = require('../permission/permissionService');
 const aclCheck = require('../../utils/aclCheck');
-const PermissionType = require('../../enums/permissionType');
-const AccessLevel = require('../../enums/accessLevel');
+
 const UserType = require('../../enums/userType');
+const userRepository = require('./userRepository');
 
 // SQL Template references for better organization
 const sqlTemplates = sails.config.globals.sqlTemplates;
@@ -27,7 +27,8 @@ module.exports = {
     if (!accountId) {
       throw errorHelper.createError('Account ID is required', 'ACCOUNT_ID_REQUIRED', 400);
     }
-    const permissions = await permissionService.getPermissionsByUserId(userId, accountId);
+    // Prefer repository over service for direct permission fetch
+    const permissions = await userRepository.fetchUserPermissions(userId, accountId);
     const perm = Array.isArray(permissions)
       ? permissions.find(p => p.permissionType === permissionType)
       : null;
@@ -72,15 +73,11 @@ module.exports = {
    * @returns {Object} Account object
    */
   validateAccount: async function(accountId) {
-    const whereClause = buildQuery.buildWhereClause({ id: accountId });
-    const query = sqlTemplates.select.findOne('account', whereClause);
-    const values = buildQuery.extractValues({ id: accountId });
-    
-    const result = await sails.sendNativeQuery(query, values);
-    if (!result.rows || result.rows.length === 0) {
+    const account = await userRepository.fetchAccountById(accountId);
+    if (!account) {
       throw errorHelper.createError('Account not found', 'ACCOUNT_NOT_FOUND', 404);
     }
-    return result.rows[0];
+    return account;
   },
 
   /**
@@ -89,30 +86,17 @@ module.exports = {
    * @returns {Object} User object
    */
   findOrCreateUser: async function(value) {
-    // First try to find existing user by email
-    const whereClause = buildQuery.buildWhereClause({ email: value.email });
-    const findQuery = sqlTemplates.select.findOne('user', whereClause);
-    const findValues = buildQuery.extractValues({ email: value.email });
-    
-    const findResult = await sails.sendNativeQuery(findQuery, findValues);
-    
-    if (findResult.rows && findResult.rows.length > 0) {
-      return findResult.rows[0];
+    const existing = await userRepository.fetchUsersByEmail(value.email);
+    if (Array.isArray(existing) && existing.length > 0) {
+      return existing[0];
     }
-    
-    // Create new user if not found
-    const columns = ['current_account_id', 'name', 'first_name', 'last_name', 'email'];
-    const createQuery = sqlTemplates.insert.create('user', columns, false);
-    const createValues = [
-      value.currentAccountId,
-      value.name,
-      value.firstName,
-      value.lastName,
-      value.email
-    ];
-    
-    const createResult = await sails.sendNativeQuery(createQuery, createValues);
-    return createResult.rows[0];
+    return await userRepository.createUser({
+      currentAccountId: value.currentAccountId,
+      name: value.name,
+      firstName: value.firstName,
+      lastName: value.lastName,
+      email: value.email
+    });
   },
 
   /**
@@ -121,21 +105,11 @@ module.exports = {
    * @param {number} accountId - Account ID
    */
   validateUserAccountUniqueness: async function(userId, accountId) {
-    const whereClause = buildQuery.buildWhereClause({ 
-      user_id: userId, 
-      account_id: accountId 
-    });
-    const query = sqlTemplates.select.findOne('user_account', whereClause);
-    const values = buildQuery.extractValues({ 
-      user_id: userId, 
-      account_id: accountId 
-    });
-    
-    const result = await sails.sendNativeQuery(query, values);
-    if (result.rows && result.rows.length > 0) {
+    const found = await userRepository.fetchUserAccount(userId, accountId);
+    if (found) {
       throw errorHelper.createError(
-        'User with this email already exists in the account', 
-        'USER_EXISTS', 
+        'User with this email already exists in the account',
+        'USER_EXISTS',
         409
       );
     }
@@ -159,11 +133,12 @@ module.exports = {
         );
       }
 
-      const columns = ['user_id', 'account_id', 'permission_type', 'access_level'];
-      const query = sqlTemplates.insert.create('user_permission', columns);
-      const values = [userId, accountId, perm.permissionType, perm.accessLevel];
-      
-      await sails.sendNativeQuery(query, values);
+      await userRepository.upsertUserPermission(
+        userId,
+        accountId,
+        perm.permissionType,
+        perm.accessLevel
+      );
     }
   },
 
@@ -174,19 +149,14 @@ module.exports = {
    * @returns {Object} UserAccount object
    */
   createUserAccount: async function(userId, value) {
-    const columns = ['user_id', 'account_id', 'timezone_name', 'user_type', 'role_type', 'allow_all_brands'];
-    const query = sqlTemplates.insert.create('user_account', columns);
-    const values = [
+    return await userRepository.createUserAccount({
       userId,
-      value.currentAccountId,
-      value.timezoneName,
-      value.userType,
-      value.roleType,
-      value.allowAllBrands
-    ];
-    
-    const result = await sails.sendNativeQuery(query, values);
-    return result.rows[0];
+      accountId: value.currentAccountId,
+      timezoneName: value.timezoneName,
+      userType: value.userType,
+      roleType: value.roleType,
+      allowAllBrands: value.allowAllBrands
+    });
   },
 
   /**
@@ -201,12 +171,8 @@ module.exports = {
     
     for (const brandId of brandIds) {
       // Validate that the brand exists
-      const whereClause = buildQuery.buildWhereClause({ id: brandId });
-      const brandQuery = sqlTemplates.select.findOne('brand', whereClause);
-      const brandValues = buildQuery.extractValues({ id: brandId });
-      
-      const brandResult = await sails.sendNativeQuery(brandQuery, brandValues);
-      if (!brandResult.rows || brandResult.rows.length === 0) {
+      const brand = await userRepository.fetchBrandById(brandId);
+      if (!brand) {
         throw errorHelper.createError(
           `Brand with ID ${brandId} not found`,
           'BRAND_NOT_FOUND',
@@ -215,12 +181,8 @@ module.exports = {
       }
 
       // Create UserAccountBrand entry
-      const columns = ['brand_id', 'user_brand_access_id'];
-      const createQuery = sqlTemplates.insert.create('user_account_brand', columns);
-      const createValues = [brandId, userId]; // Using userId as userBrandAccessId for now
-      
-      const result = await sails.sendNativeQuery(createQuery, createValues);
-      userAccountBrands.push(result.rows[0]);
+      const result = await userRepository.createUserAccountBrand(brandId, userId);
+      userAccountBrands.push(result);
     }
     
     return userAccountBrands;
@@ -234,42 +196,24 @@ module.exports = {
   schedulePasswordResetEmail: async function(user, accountId) {
     try {
       // Get account details for email
-      const whereClause = buildQuery.buildWhereClause({ id: accountId });
-      const query = sqlTemplates.select.findOne('account', whereClause);
-      const values = buildQuery.extractValues({ id: accountId });
-      
-      const accountResult = await sails.sendNativeQuery(query, values);
-      if (!accountResult.rows || accountResult.rows.length === 0) {
+      const account = await userRepository.fetchAccountById(accountId);
+      if (!account) {
         console.warn(`Account ${accountId} not found for password reset email`);
         return;
       }
 
-      const account = accountResult.rows[0];
-
       // Get user account details to determine user type
-      const userAccountWhereClause = buildQuery.buildWhereClause({ 
-        user_id: user.id, 
-        account_id: accountId 
-      });
-      const userAccountQuery = sqlTemplates.select.findOne('user_account', userAccountWhereClause);
-      const userAccountValues = buildQuery.extractValues({ 
-        user_id: user.id, 
-        account_id: accountId 
-      });
-      
-      const userAccountResult = await sails.sendNativeQuery(userAccountQuery, userAccountValues);
-      if (!userAccountResult.rows || userAccountResult.rows.length === 0) {
+      const userAccount = await userRepository.fetchUserAccount(user.id, accountId);
+      if (!userAccount) {
         console.warn(`User account not found for user ${user.id} in account ${accountId}`);
         return;
       }
-
-      const userAccount = userAccountResult.rows[0];
 
       // Generate JWT token with user information
       const tokenPayload = {
         accountId: accountId,
         userId: parseInt(user.id),
-        userType: userAccount.user_type,
+        userType: userAccount.userType,
         email: user.email,
         type: 'password_reset'
       };

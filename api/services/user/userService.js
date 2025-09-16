@@ -4,19 +4,18 @@ const scheduler = require('../../utils/scheduler');
 const userHelper = require('./helper');
 const PermissionType = require('../../enums/permissionType');
 const AccessLevel = require('../../enums/accessLevel');
+const UserRepository = require('./userRepository');
 
 module.exports = {
   getUserById: async function(userId, currentUserId = null, accountId = null, isFromToken = false) {
     try {
-      // Waterline: fetch user
       const numericUserId = Number(userId);
-      const user = await User.findOne({ id: numericUserId });
+      const user = await UserRepository.fetchUserById(numericUserId);
       if (!user) {
         throw errorHelper.createError('User not found', 'USER_NOT_FOUND', 404);
       }
 
-      // Waterline: fetch user's account (current account)
-      const userAccount = await UserAccount.findOne({ userId: numericUserId, accountId: user.currentAccountId });
+      const userAccount = await UserRepository.fetchUserAccount(numericUserId, user.currentAccountId);
       if (!userAccount) {
         throw errorHelper.createError('User account not found', 'USER_ACCOUNT_NOT_FOUND', 404);
       }
@@ -26,11 +25,7 @@ module.exports = {
         await userHelper.validateUserPermission(currentUserId, userAccount.accountId, PermissionType.USER_MANAGEMENT, AccessLevel.VIEW_ACCESS);
       }
 
-      // Waterline: fetch permissions for this user and account
-      const permissionsRows = await UserPermission.find({
-        where: { userId: numericUserId, accountId: userAccount.accountId },
-        select: ['permissionType', 'accessLevel']
-      });
+      const permissionsRows = await UserRepository.fetchUserPermissions(numericUserId, userAccount.accountId);
 
       const permissions = permissionsRows.map(perm => ({
         permissionType: perm.permissionType,
@@ -88,16 +83,14 @@ module.exports = {
         throw errorHelper.createError('Email is required', 'EMAIL_REQUIRED', 400);
       }
 
-      // Find all users with this email
-      const users = await User.find({ email: email.toLowerCase() });
+      const users = await UserRepository.fetchUsersByEmail(email);
       if (!users || users.length === 0) {
         return [];
       }
 
       const userIds = users.map(user => user.id);
 
-      // Find all UserAccount entries for these users
-      const userAccounts = await UserAccount.find({ userId: userIds });
+      const userAccounts = await UserRepository.fetchUserAccountsByUserIds(userIds);
       if (!userAccounts || userAccounts.length === 0) {
         return [];
       }
@@ -106,7 +99,7 @@ module.exports = {
       const accountIds = [...new Set(userAccounts.map(ua => ua.accountId))];
       
       // Get account details
-      const accounts = await Account.find({ id: accountIds });
+      const accounts = await UserRepository.fetchAccountsByIds(accountIds);
       const accountMap = {};
       accounts.forEach(acc => {
         accountMap[acc.id] = acc;
@@ -178,51 +171,28 @@ module.exports = {
   
       //  Transaction to ensure atomic updates
       const result = await db(async (dbSession) => {
-        // Update User
         if (!_.isEmpty(userUpdateData)) {
-          await User.updateOne({ id: numericUserId })
-            .set(userUpdateData)
-            .usingConnection(dbSession);
+          await UserRepository.updateUserById(numericUserId, userUpdateData, dbSession);
         }
-  
-        // Update UserAccount
+
         if (contextAccountId && !_.isEmpty(userAccountUpdateData)) {
-          await UserAccount.updateOne({
-            userId: numericUserId,
-            accountId: contextAccountId
-          })
-            .set(userAccountUpdateData)
-            .usingConnection(dbSession);
+          await UserRepository.updateUserAccount(numericUserId, contextAccountId, userAccountUpdateData, dbSession);
         }
-  
-        // Update Permissions (upsert)
+
         if (contextAccountId && Array.isArray(updateData.permissions)) {
           for (const p of updateData.permissions) {
             if (!p?.permissionType || !p?.accessLevel) continue;
-  
-            const permissionType = String(p.permissionType).toUpperCase();
-            const accessLevel = String(p.accessLevel).toUpperCase();
-  
-            const updated = await UserPermission.updateOne({
-              userId: numericUserId,
-              accountId: contextAccountId,
-              permissionType
-            })
-              .set({ accessLevel })
-              .usingConnection(dbSession);
-  
-            if (!updated) {
-              await UserPermission.create({
-                userId: numericUserId,
-                accountId: contextAccountId,
-                permissionType,
-                accessLevel
-              }).usingConnection(dbSession);
-            }
+            await UserRepository.upsertUserPermission(
+              numericUserId,
+              contextAccountId,
+              p.permissionType,
+              p.accessLevel,
+              dbSession
+            );
           }
         }
-  
-        return true; // success marker
+
+        return true;
       });
   
       // Return consistent response
@@ -353,26 +323,19 @@ module.exports = {
       let totalUserAccounts = 0;
 
       if (isUserAccountSort || !normalizedSortColumn) {
-        // Sort and paginate at DB level when sorting by UserAccount or when no valid sort provided
         const dbSort = normalizedSortColumn
           ? `${normalizedSortColumn} ${sortAsc ? 'ASC' : 'DESC'}`
           : 'id DESC';
         const [ua, total] = await Promise.all([
-          UserAccount.find({
-            where: userAccountWhere,
-            sort: dbSort,
-            limit: limitNum,
-            skip
-          }).meta({ makeLikeModifierCaseInsensitive: true }),
-          UserAccount.count(userAccountWhere)
+          UserRepository.listUserAccounts(userAccountWhere, dbSort, limitNum, skip),
+          UserRepository.countUserAccounts(userAccountWhere)
         ]);
         userAccounts = ua;
         totalUserAccounts = total;
       } else if (isUserSort) {
-        // Fetch all matching user accounts (no pagination) to sort by user fields reliably
         const [ua, total] = await Promise.all([
-          UserAccount.find({ where: userAccountWhere }).meta({ makeLikeModifierCaseInsensitive: true }),
-          UserAccount.count(userAccountWhere)
+          UserRepository.listUserAccounts(userAccountWhere, undefined, undefined, undefined),
+          UserRepository.countUserAccounts(userAccountWhere)
         ]);
         userAccounts = ua;
         totalUserAccounts = total;
@@ -387,10 +350,7 @@ module.exports = {
       }
 
       // Fetch users for these userIds (search will be applied in JS for reliable case-insensitivity)
-      const users = await User.find({
-        where: { id: userIds },
-        select: ['id', 'name', 'firstName', 'lastName', 'email']
-      });
+      const users = await UserRepository.fetchUsersByIds(userIds, ['id', 'name', 'firstName', 'lastName', 'email']);
 
       // Build lookup map for users
       const userMap = {};
