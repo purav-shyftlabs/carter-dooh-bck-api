@@ -1,6 +1,11 @@
 const errorHelper = require('../../utils/errorHelper');
 const scheduler = require('../../utils/scheduler');
 const jwt = require('jsonwebtoken');
+const permissionService = require('../permission/permissionService');
+const aclCheck = require('../../utils/aclCheck');
+const PermissionType = require('../../enums/permissionType');
+const AccessLevel = require('../../enums/accessLevel');
+const UserType = require('../../enums/userType');
 
 // SQL Template references for better organization
 const sqlTemplates = sails.config.globals.sqlTemplates;
@@ -12,6 +17,55 @@ const buildQuery = sails.config.globals.buildQuery;
  */
 
 module.exports = {
+  /**
+   * Validate a user's permission against required access
+   */
+  validateUserPermission: async function(userId, accountId, permissionType, requiredAccessLevel) {
+    if (!userId) {
+      throw errorHelper.createError('Unauthorized', 'UNAUTHORIZED', 401);
+    }
+    if (!accountId) {
+      throw errorHelper.createError('Account ID is required', 'ACCOUNT_ID_REQUIRED', 400);
+    }
+    const permissions = await permissionService.getPermissionsByUserId(userId, accountId);
+    const perm = Array.isArray(permissions)
+      ? permissions.find(p => p.permissionType === permissionType)
+      : null;
+    if (!perm) {
+      throw errorHelper.createError('Insufficient permissions for ' + permissionType, 'FORBIDDEN', 403);
+    }
+    const hasAccess = aclCheck.checkAcl(perm.permissionType, perm.accessLevel, requiredAccessLevel);
+    if (!hasAccess) {
+      throw errorHelper.createError('Insufficient permissions for ' + permissionType, 'FORBIDDEN', 403);
+    }
+    return true;
+  },
+
+  /**
+   * Ensure the user is a publisher (used for create-user flow)
+   */
+  ensurePublisherUser: function(user) {
+    if (!user || user.userType !== UserType.PUBLISHER) {
+      throw errorHelper.createError('Advertiser cannot perform this action', 'FORBIDDEN', 403);
+    }
+    return true;
+  },
+
+  /**
+   * Determine allowed user types a caller can view, based on their user type
+   */
+  getAllowedUserTypesForViewer: function(currentUser) {
+    if (!currentUser) {
+      throw errorHelper.createError('User not found', 'USER_NOT_FOUND', 404);
+    }
+    if (currentUser.userType === UserType.ADVERTISER) {
+      return [UserType.ADVERTISER];
+    }
+    if (currentUser.userType === UserType.PUBLISHER) {
+      return [UserType.ADVERTISER, UserType.PUBLISHER];
+    }
+    throw errorHelper.createError('Invalid user type', 'FORBIDDEN', 403);
+  },
   /**
    * Validate account exists
    * @param {number} accountId - Account ID to validate

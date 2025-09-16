@@ -4,11 +4,6 @@ const scheduler = require('../../utils/scheduler');
 const userHelper = require('./helper');
 const PermissionType = require('../../enums/permissionType');
 const AccessLevel = require('../../enums/accessLevel');
-const aclCheck = require('../../utils/aclCheck');
-
-// SQL Template references for better organization
-const sqlTemplates = sails.config.globals.sqlTemplates;
-const buildQuery = sails.config.globals.buildQuery;
 
 module.exports = {
   getUserById: async function(userId, currentUserId = null, accountId = null) {
@@ -141,6 +136,8 @@ module.exports = {
 
   editUser: async function(userId, updateData, contextAccountId, currentUserId) {
     try {
+      // Authorization: require FULL_ACCESS for USER_MANAGEMENT
+      await userHelper.validateUserPermission(currentUserId, contextAccountId, PermissionType.USER_MANAGEMENT, AccessLevel.FULL_ACCESS);
 
       const numericUserId = Number(userId);
 
@@ -221,8 +218,16 @@ module.exports = {
     }
   },
   
-  createUser: async function (value) {
+  createUser: async function (value, context) {
     try {
+      // context: { currentUserId, accountId }
+      const { currentUserId, accountId } = context || {};
+      await userHelper.validateUserPermission(currentUserId, accountId, PermissionType.USER_MANAGEMENT, AccessLevel.FULL_ACCESS);
+      // Ensure only publishers can create users
+      const currentUser = await this.getUserById(currentUserId);
+      userHelper.ensurePublisherUser(currentUser);
+      // Force account to context account
+      value.currentAccountId = accountId;
       await userHelper.validateAccount(value.currentAccountId);
       userHelper.validateBrandsConfiguration(value);
           
@@ -246,8 +251,11 @@ module.exports = {
     }
   },
 
-  getAllUsers: async function(filters) {
+  getAllUsers: async function(filters, context) {
     try {
+      const { currentUserId, accountId: contextAccountId } = context || {};
+      // Authorization: require VIEW_ACCESS on USER_MANAGEMENT
+      await userHelper.validateUserPermission(currentUserId, contextAccountId || filters.accountId, PermissionType.USER_MANAGEMENT, AccessLevel.VIEW_ACCESS);
       const {
         accountId,
         search,

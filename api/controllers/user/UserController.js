@@ -22,30 +22,9 @@ module.exports = {
     }
     // enforce account from token (schema forbids client-provided)
     value.currentAccountId = selectedAccount;
-    const user = await userService.getUserById(userId);
-    // check is user is publisher
-    if (user.userType != UserType.PUBLISHER) {
-      return responseHelper.error(res, 'Advertiser cannot create users', 403);
-    }
-    // fetch user permission
-    const userPermission = await permissionService.getPermissionsByUserId(userId, selectedAccount);
-    // find permission type in userPermission
-    const permissionType = Array.isArray(userPermission)
-      ? userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT)
-      : null;
-
-    const hasAccess = aclCheck.checkAcl(
-      permissionType.permissionType,
-      permissionType.accessLevel,
-      AccessLevel.FULL_ACCESS
-    );
-
-    if (!hasAccess) {
-      return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
-    }
-
+    // Authorization and role checks moved to service layer
     // Service call
-    const result = await userService.createUser(value);
+    const result = await userService.createUser(value, { currentUserId: userId, accountId: selectedAccount });
 
     // Success response
     return responseHelper.created(res, result, 'User created successfully');
@@ -86,26 +65,7 @@ module.exports = {
       return responseHelper.error(res, 'User not found', 404);
     }
 
-    // Check user permissions for USER_MANAGEMENT
-    const userPermission = await permissionService.getPermissionsByUserId(userId, selectedAccount);
-    const permissionType = Array.isArray(userPermission)
-      ? userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT)
-      : null;
-
-    if (!permissionType) {
-      return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
-    }
-
-    // Check if user has VIEW_ACCESS or higher for USER_MANAGEMENT
-    const hasAccess = aclCheck.checkAcl(
-      permissionType.permissionType,
-      permissionType.accessLevel,
-      AccessLevel.VIEW_ACCESS
-    );
-
-    if (!hasAccess) {
-      return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
-    }
+    // Authorization moved to service layer
 
     // Validate and normalize query
     const {
@@ -154,7 +114,7 @@ module.exports = {
       return responseHelper.error(res, `You can only view ${allowedUserTypes.join(' and ')} users`, 403);
     }
 
-    const result = await userService.getAllUsers(filters);
+    const result = await userService.getAllUsers(filters, { currentUserId: userId, accountId: resolvedAccountId });
     return responseHelper.success(res, result, 'Users fetched successfully');
   }, { action: 'UserController.getAllUsers' }),
 
@@ -199,26 +159,7 @@ module.exports = {
     if (!currentUserId) {
       return responseHelper.error(res, 'Unauthorized', 401);
     }
-    // Check user permissions for USER_MANAGEMENT
-    const userPermission = await permissionService.getPermissionsByUserId(currentUserId, selectedAccount);
-    const permissionType = Array.isArray(userPermission)
-      ? userPermission.find(permission => permission.permissionType === PermissionType.USER_MANAGEMENT)
-      : null;
-
-    if (!permissionType) {
-      return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
-    }
-
-    // Check if user has FULL_ACCESS for USER_MANAGEMENT to edit users
-    const hasAccess = aclCheck.checkAcl(
-      permissionType.permissionType,
-      permissionType.accessLevel,
-      AccessLevel.FULL_ACCESS
-    );
-
-    if (!hasAccess) {
-      return responseHelper.error(res, 'Insufficient permissions for USER_MANAGEMENT', 403);
-    }
+    // Authorization moved to service layer
     if (!selectedAccount) {
       return responseHelper.error(res, 'Account ID is required', 400);
     }
