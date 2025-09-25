@@ -21,7 +21,7 @@ transporter.verify((error, success) => {
     console.warn('⚠️  SMTP configuration issue:', error.message);
     console.warn('📧 Email functionality may not work properly. Check your SMTP settings.');
   } else {
-    console.log('✅ SMTP server is ready to send emails');
+    console.log(' SMTP server is ready to send emails');
   }
 });
 

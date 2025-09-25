@@ -144,7 +144,7 @@ module.exports = {
         AccessLevel.FULL_ACCESS
       );
   
-      // ✅ Field maps
+      //  Field maps
       const userFields = ['name', 'first_name', 'last_name', 'email', 'current_account_id'];
       const userAccountFields = [
         'role_type',
@@ -159,7 +159,7 @@ module.exports = {
         'enable_two_factor_authentication'
       ];
   
-      // ✅ Build updates
+      //  Build updates
       const userUpdateData = _.pick(updateData, userFields);
       const userAccountUpdateData = _.pick(updateData, userAccountFields);
   

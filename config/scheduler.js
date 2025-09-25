@@ -17,7 +17,7 @@ module.exports.scheduler = {
     const mailHelper = require('../api/utils/mailHelper');
     mailHelper.testEmailConfig().then(isValid => {
       if (isValid) {
-        console.log('✅ Email configuration is valid');
+        console.log(' Email configuration is valid');
       } else {
         console.warn('⚠️  Email configuration has issues - check your SMTP settings');
       }
@@ -25,7 +25,7 @@ module.exports.scheduler = {
 
     // Clean old jobs on startup
     scheduler.clean().then(() => {
-      console.log('✅ Scheduler initialized successfully');
+      console.log(' Scheduler initialized successfully');
       cb();
     }).catch(error => {
       console.error('❌ Scheduler initialization failed:', error);
