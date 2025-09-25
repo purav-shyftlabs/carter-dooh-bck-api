@@ -31,12 +31,12 @@ module.exports = {
     // Prefer repository over service for direct permission fetch
     const permissions = await userRepository.fetchUserPermissions(userId, accountId);
     const perm = Array.isArray(permissions)
-      ? permissions.find(p => p.permissionType === permissionType)
+      ? permissions.find(p => p.permission_type === permissionType)
       : null;
     if (!perm) {
       throw errorHelper.createError('Insufficient permissions for ' + permissionType, 'FORBIDDEN', 403);
     }
-    const hasAccess = aclCheck.checkAcl(perm.permissionType, perm.accessLevel, requiredAccessLevel);
+    const hasAccess = aclCheck.checkAcl(perm.permission_type, perm.access_level, requiredAccessLevel);
     if (!hasAccess) {
       throw errorHelper.createError('Insufficient permissions for ' + permissionType, 'FORBIDDEN', 403);
     }

@@ -21,6 +21,9 @@ module.exports = async function(req, res, next) {
     const payload = tokenHelper.getTokenPayload(req);
     
     // Add user info to request object
+    // convert to the integer
+    payload.userId = Number(payload.userId);
+    payload.selectedAccount = Number(payload.selectedAccount);
     req.user = payload;
     
     // Continue to next middleware/action

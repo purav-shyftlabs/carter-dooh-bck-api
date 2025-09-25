@@ -15,42 +15,42 @@ module.exports = {
         throw errorHelper.createError('User not found', 'USER_NOT_FOUND', 404);
       }
 
-      const userAccount = await UserRepository.fetchUserAccount(numericUserId, user.currentAccountId);
+      const userAccount = await UserRepository.fetchUserAccount(numericUserId, user.current_account_id);
       if (!userAccount) {
         throw errorHelper.createError('User account not found', 'USER_ACCOUNT_NOT_FOUND', 404);
       }
 
       // check currentUSer has permission to view this user
       if(!isFromToken) {
-        await userHelper.validateUserPermission(currentUserId, userAccount.accountId, PermissionType.USER_MANAGEMENT, AccessLevel.VIEW_ACCESS);
+        await userHelper.validateUserPermission(currentUserId, userAccount.account_id, PermissionType.USER_MANAGEMENT, AccessLevel.VIEW_ACCESS);
       }
 
-      const permissionsRows = await UserRepository.fetchUserPermissions(numericUserId, userAccount.accountId);
+      const permissionsRows = await UserRepository.fetchUserPermissions(numericUserId, userAccount.account_id);
 
       const permissions = permissionsRows.map(perm => ({
-        permissionType: perm.permissionType,
-        accessLevel: perm.accessLevel
+        permissionType: perm.permission_type,
+        accessLevel: perm.access_level
       }));
 
       // Build response
       const formattedUser = {
-        id: String(user.id),
-        accountId: String(userAccount.accountId),
-        name: user.name || `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-        roleType: userAccount.roleType,
-        userType: userAccount.userType,
-        timeZoneName: userAccount.timezoneName,
+        id: Number(user.id),
+        accountId: Number(userAccount.account_id),
+        name: user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim(),
+        roleType: userAccount.role_type,
+        userType: userAccount.user_type,
+        timeZoneName: userAccount.timezone_name,
         email: user.email,
-        isFirstTimeLogin: Boolean(userAccount.isFirstTimeLogin),
-        lastLoginTimestamp: userAccount.lastLoginTimestamp ? new Date(userAccount.lastLoginTimestamp).toISOString() : null,
-        firstLoginTimestamp: userAccount.firstLoginTimestamp ? new Date(userAccount.firstLoginTimestamp).toISOString() : null,
-        acceptedTermsAndConditions: Boolean(userAccount.acceptedTermsAndConditions),
-        allowAllAdvertisers: Boolean(userAccount.allowAllBrands),
-        lastReadReleaseNotesVersion: userAccount.lastReadReleaseNotesVersion || null,
+        isFirstTimeLogin: Boolean(userAccount.is_first_time_login),
+        lastLoginTimestamp: userAccount.last_login_timestamp ? new Date(userAccount.last_login_timestamp).toISOString() : null,
+        firstLoginTimestamp: userAccount.first_login_timestamp ? new Date(userAccount.first_login_timestamp).toISOString() : null,
+        acceptedTermsAndConditions: Boolean(userAccount.accepted_terms_and_conditions),
+        allowAllAdvertisers: Boolean(userAccount.allow_all_brands),
+        lastReadReleaseNotesVersion: userAccount.last_read_release_notes_version || null,
         permissions
       };
       
-      accountId = userAccount.accountId;
+      accountId = userAccount.account_id;
       // Add permission comparison flags if current user context is provided
       if (currentUserId && accountId) {
         try {
@@ -96,7 +96,7 @@ module.exports = {
       }
 
       // Get unique account IDs
-      const accountIds = [...new Set(userAccounts.map(ua => ua.accountId))];
+      const accountIds = [...new Set(userAccounts.map(ua => ua.account_id))];
       
       // Get account details
       const accounts = await UserRepository.fetchAccountsByIds(accountIds);
@@ -107,21 +107,21 @@ module.exports = {
 
       // Build response with user and account information
       const result = userAccounts.map(userAccount => {
-        const user = users.find(u => u.id === userAccount.userId);
-        const account = accountMap[userAccount.accountId];
+        const user = users.find(u => u.id === userAccount.user_id);
+        const account = accountMap[userAccount.account_id];
         
         return {
           userId: user.id,
           email: user.email,
           name: user.name,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          accountId: userAccount.accountId,
+          firstName: user.first_name,
+          lastName: user.last_name,
+          accountId: userAccount.account_id,
           accountName: account ? account.name : null,
-          userType: userAccount.userType,
-          roleType: userAccount.roleType,
+          userType: userAccount.user_type,
+          roleType: userAccount.role_type,
           active: userAccount.active,
-          currentAccountId: user.currentAccountId
+          currentAccountId: user.current_account_id
         };
       });
 
@@ -145,18 +145,18 @@ module.exports = {
       );
   
       // ✅ Field maps
-      const userFields = ['name', 'firstName', 'lastName', 'email', 'currentAccountId'];
+      const userFields = ['name', 'first_name', 'last_name', 'email', 'current_account_id'];
       const userAccountFields = [
-        'roleType',
-        'userType',
-        'timeZoneName',
-        'isFirstTimeLogin',
-        'acceptedTermsAndConditions',
-        'allowAllAdvertisers',   // maps -> allowAllBrands
-        'useCustomBranding',
-        'lastReadReleaseNotesVersion',
+        'role_type',
+        'user_type',
+        'timezone_name',
+        'is_first_time_login',
+        'accepted_terms_and_conditions',
+        'allowAllAdvertisers',   // maps -> allow_all_brands
+        'use_custom_branding',
+        'last_read_release_notes_version',
         'active',
-        'enableTwoFactorAuthentication'
+        'enable_two_factor_authentication'
       ];
   
       // ✅ Build updates
@@ -165,7 +165,7 @@ module.exports = {
   
       // Map special cases
       if (updateData.allowAllAdvertisers !== undefined) {
-        userAccountUpdateData.allowAllBrands = updateData.allowAllAdvertisers;
+        userAccountUpdateData.allow_all_brands = updateData.allowAllAdvertisers;
         delete userAccountUpdateData.allowAllAdvertisers;
       }
   
@@ -254,8 +254,13 @@ module.exports = {
   getAllUsers: async function(filters, context) {
     try {
       const { currentUserId, accountId: contextAccountId } = context || {};
+      
       // Authorization: require VIEW_ACCESS on USER_MANAGEMENT
-      await userHelper.validateUserPermission(currentUserId, contextAccountId || filters.accountId, PermissionType.USER_MANAGEMENT, AccessLevel.VIEW_ACCESS);
+      if (currentUserId && (contextAccountId || filters.accountId)) {
+        await userHelper.validateUserPermission(currentUserId, contextAccountId || filters.accountId, PermissionType.USER_MANAGEMENT, AccessLevel.VIEW_ACCESS);
+      } else {
+        throw errorHelper.createError('Authentication required', 'AUTHENTICATION_REQUIRED', 401);
+      }
       const {
         accountId,
         search,
@@ -281,25 +286,21 @@ module.exports = {
       }
 
       // Build Waterline criteria for UserAccount
-      const userAccountWhere = { accountId: Number(accountId) };
+      const userAccountWhere = { account_id: Number(accountId) };
 
       if (userRole) {
-        userAccountWhere.roleType = String(userRole).toUpperCase();
+        userAccountWhere.role_type = String(userRole).toUpperCase();
       }
       if (userType) {
-        userAccountWhere.userType = String(userType).toUpperCase();
+        userAccountWhere.user_type = String(userType).toUpperCase();
       }
       if (status == true || status == false) {
-        userAccountWhere.active = status;
-      }
-      // Only apply status filter if the attribute exists on the model
-      if (status == true || status == false && UserAccount && UserAccount.attributes && UserAccount.attributes.status) {
         userAccountWhere.active = status;
       }
 
       // Determine sorting from sortBy and sortType
       let sortColumn = sortBy ? String(sortBy) : null;
-      sortColumn == "role" ? sortColumn = "roleType" : sortColumn == "advertisers" ? sortColumn = "allowAllBrands" : sortColumn;
+      sortColumn == "role" ? sortColumn = "role_type" : sortColumn == "advertisers" ? sortColumn = "allow_all_brands" : sortColumn;
       console.log('sortColumn', sortColumn);
       let sortAsc = true; // default ascending
       if (sortType !== undefined && sortType !== null) {
@@ -308,9 +309,9 @@ module.exports = {
         else if (st === '0' || st === 'desc' || st === 'descending') sortAsc = false;
       }
 
-      // Map incoming sort column names to model attributes
-      const userAccountColumns = new Set(Object.keys(UserAccount.attributes || {}));
-      const userColumns = new Set(Object.keys(User.attributes || {}));
+      // Map incoming sort column names to database columns
+      const userAccountColumns = new Set(['id', 'user_id', 'account_id', 'role_type', 'user_type', 'timezone_name', 'active', 'allow_all_brands', 'is_first_time_login', 'accepted_terms_and_conditions', 'use_custom_branding', 'last_read_release_notes_version', 'enable_two_factor_authentication', 'created_at', 'updated_at']);
+      const userColumns = new Set(['id', 'current_account_id', 'name', 'first_name', 'last_name', 'email', 'encrypted_password', 'auth0_id', 'authentik_id', 'auth_tokens', 'api_key']);
 
       // Normalize special cases
       const normalizeColumn = (col) => {
@@ -345,7 +346,7 @@ module.exports = {
       }
 
       // Extract userIds from user accounts
-      const userIds = userAccounts.map(ua => ua.userId);
+      const userIds = userAccounts.map(ua => ua.user_id);
 
       // Short-circuit if no user ids
       if (userIds.length === 0) {
@@ -353,7 +354,7 @@ module.exports = {
       }
 
       // Fetch users for these userIds (search will be applied in JS for reliable case-insensitivity)
-      const users = await UserRepository.fetchUsersByIds(userIds, ['id', 'name', 'firstName', 'lastName', 'email']);
+      const users = await UserRepository.fetchUsersByIds(userIds, ['id', 'name', 'first_name', 'last_name', 'email']);
 
       // Build lookup map for users
       const userMap = {};
@@ -366,9 +367,9 @@ module.exports = {
       if (search) {
         const tokens = String(search).toLowerCase().split(/\s+/).filter(Boolean);
         filteredUserAccounts = userAccounts.filter(ua => {
-          const u = userMap[ua.userId];
+          const u = userMap[ua.user_id];
           if (!u) return false;
-          const haystack = [u.name, u.email, u.firstName, u.lastName, u.id]
+          const haystack = [u.name, u.email, u.first_name, u.last_name, u.id]
             .filter(Boolean)
             .join(' ')
             .toLowerCase();
@@ -381,8 +382,8 @@ module.exports = {
       if (isUserSort && normalizedSortColumn) {
         const col = normalizedSortColumn;
         filteredUserAccounts.sort((a, b) => {
-          const ua = userMap[a.userId] || {};
-          const ub = userMap[b.userId] || {};
+          const ua = userMap[a.user_id] || {};
+          const ub = userMap[b.user_id] || {};
           const va = (ua[col] ?? '').toString().toLowerCase();
           const vb = (ub[col] ?? '').toString().toLowerCase();
           if (va < vb) return sortAsc ? -1 : 1;
@@ -402,26 +403,26 @@ module.exports = {
 
       // Format response
       const formattedUsers = finalUserAccounts.map(ua => {
-        const u = userMap[ua.userId];
+        const u = userMap[ua.user_id];
         if (!u) {
           return {
-            id: ua.userId,
+            id: ua.user_id,
             name: 'User not found',
             email: 'N/A',
-            userType: ua.userType,
-            status: ua.status,
-            roleType: ua.roleType,
-            allowAllAdvertisers: ua.allowAllBrands
+            userType: ua.user_type,
+            status: ua.active,
+            roleType: ua.role_type,
+            allowAllAdvertisers: ua.allow_all_brands
           };
         }
         return {
           id: u.id,
-          name: u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+          name: u.name || `${u.first_name || ''} ${u.last_name || ''}`.trim(),
           email: u.email,
-          userType: ua.userType,
-          status: ua.status,
-          roleType: ua.roleType,
-          allowAllAdvertisers: ua.allowAllBrands
+          userType: ua.user_type,
+          status: ua.active,
+          roleType: ua.role_type,
+          allowAllAdvertisers: ua.allow_all_brands
         };
       });
 
