@@ -19,6 +19,7 @@ psql -U postgres -f create-role.sql
 ```
 
 **What this script does:**
+
 - Creates a new PostgreSQL user `carter_dooh` with password `Carter2025`
 - Creates a new database `carter_doooh` owned by the `carter_dooh` user
 - Grants all necessary privileges to the user
@@ -31,3 +32,10 @@ Next, run the `create-user.sql` file to create all tables and insert initial dat
 # Connect to the new database and run the table creation script
 psql -U carter_dooh -d carter_doooh -f create-user.sql
 ```
+
+### Step 3: Default Admin Credentials
+
+Use these credentials to log in after setup:
+
+- Username: `carter@shyftlabs.io`
+- Password: `Qwerty@123`
