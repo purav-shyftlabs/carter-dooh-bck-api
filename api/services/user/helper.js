@@ -170,6 +170,12 @@ module.exports = {
   createUserAccountBrands: async function(userId, accountId, brandIds) {
     const userAccountBrands = [];
     
+    // Get the user_account.id for the foreign key reference
+    const userAccount = await userRepository.fetchUserAccount(userId, accountId);
+    if (!userAccount) {
+      throw errorHelper.createError('User account not found', 'USER_ACCOUNT_NOT_FOUND', 404);
+    }
+    
     for (const brandId of brandIds) {
       // Validate that the brand exists
       const brand = await userRepository.fetchBrandById(brandId);
@@ -181,8 +187,8 @@ module.exports = {
         );
       }
 
-      // Create UserAccountBrand entry
-      const result = await userRepository.createUserAccountBrand(brandId, userId);
+      // Create UserAccountBrand entry - user_brand_access_id should be user_account.id
+      const result = await userRepository.createUserAccountBrand(brandId, userAccount.id);
       userAccountBrands.push(result);
     }
     

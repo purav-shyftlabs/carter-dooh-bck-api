@@ -49,6 +49,17 @@ module.exports = {
         lastReadReleaseNotesVersion: userAccount.last_read_release_notes_version || null,
         permissions
       };
+
+      // If allow_all_brands is false, include selected brand names
+      if (!Boolean(userAccount.allow_all_brands)) {
+        try {
+          const brandData = await UserRepository.fetchSelectedBrandNamesForUser(numericUserId, userAccount.account_id);
+          formattedUser.allowedBrands = brandData;
+        } catch (brandErr) {
+          console.warn('Fetching selected brands failed:', brandErr);
+          formattedUser.allowedBrands = [];
+        }
+      }
       
       accountId = userAccount.account_id;
       // Add permission comparison flags if current user context is provided
@@ -192,6 +203,21 @@ module.exports = {
           }
         }
 
+        // Handle allowedBrands update if user has limited brand access
+        if (contextAccountId && Array.isArray(updateData.allowedBrands)) {
+          // Get current user account to check if they have limited access
+          const currentUserAccount = await UserRepository.fetchUserAccount(numericUserId, contextAccountId);
+          if (currentUserAccount && !Boolean(currentUserAccount.allow_all_brands)) {
+            // Delete existing brand mappings for this user
+            await UserRepository.deleteUserAccountBrands(numericUserId, contextAccountId, dbSession);
+            
+            // Add new brand mappings
+            for (const brandId of updateData.allowedBrands) {
+              await UserRepository.createUserAccountBrand(brandId, currentUserAccount.id, dbSession);
+            }
+          }
+        }
+
         return true;
       });
   
@@ -238,9 +264,9 @@ module.exports = {
       await userHelper.validatePermissions(user.id, value.currentAccountId, value.permissions);
 
       // Create UserAccountBrand entries if allowAllBrandsList is provided
-      // if (value.allowAllBrandsList && value.allowAllBrandsList.length > 0) {
-      //   await userHelper.createUserAccountBrands(user.id, value.currentAccountId, value.allowAllBrandsList);
-      // }
+      if (value.allowAllBrandsList && value.allowAllBrandsList.length > 0) {
+        await userHelper.createUserAccountBrands(user.id, value.currentAccountId, value.allowAllBrandsList);
+      }
 
       // Send password reset email in background
       await userHelper.schedulePasswordResetEmail(user, value.currentAccountId);
@@ -425,6 +451,21 @@ module.exports = {
           allowAllAdvertisers: ua.allow_all_brands
         };
       });
+
+      // If user has limited brand access, include selected brand names list
+      await Promise.all(
+        formattedUsers.map(async (fu) => {
+          try {
+            if (fu && fu.allowAllAdvertisers === false) {
+              const brandData = await UserRepository.fetchSelectedBrandNamesForUser(fu.id, accountId);
+              fu.allowedBrands = brandData;
+            }
+          } catch (e) {
+            // Non-fatal: default to empty list on failure
+            fu.allowedBrands = [];
+          }
+        })
+      );
 
       return utilityHelper.buildPaginationResponse(formattedUsers, finalTotal, pageNum, limitNum);
     } catch (error) {

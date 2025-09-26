@@ -59,4 +59,16 @@ module.exports.routes = {
   'GET /users/me': { controller: 'user/UserController', action: 'getUserByIdToken' },
   'GET /users/:userId': { controller: 'user/UserController', action: 'getUserById' },
 
+  // parent company routes
+  'GET /parent-companies': { controller: 'parentCompany/ParentCompanyController', action: 'list' },
+  'POST /parent-companies': { controller: 'parentCompany/ParentCompanyController', action: 'create' },
+  'GET /parent-companies/:id': { controller: 'parentCompany/ParentCompanyController', action: 'getById' },
+  'PATCH /parent-companies/:id': { controller: 'parentCompany/ParentCompanyController', action: 'update' },
+  'DELETE /parent-companies/:id': { controller: 'parentCompany/ParentCompanyController', action: 'remove' },
+
+  // brand routes
+  'GET /brands': { controller: 'brand/BrandController', action: 'list' },
+  'POST /brands': { controller: 'brand/BrandController', action: 'create' },
+  'GET /brands/:id': { controller: 'brand/BrandController', action: 'getById' },
+  'PATCH /brands/:id': { controller: 'brand/BrandController', action: 'update' },
 };

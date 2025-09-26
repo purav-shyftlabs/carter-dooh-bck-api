@@ -235,12 +235,50 @@ module.exports = {
     return result.rows[0] || null;
   },
 
+  fetchSelectedBrandIdsForUser: async function(userId, accountId) {
+    const result = await sails.sendNativeQuery(
+      `SELECT uab.brand_id AS brand_id
+       FROM user_account ua
+       JOIN user_account_brand uab ON uab.user_brand_access_id = ua.id
+       WHERE ua.user_id = $1 AND ua.account_id = $2`,
+      [safeNumber(userId), safeNumber(accountId)]
+    );
+    return result.rows.map(r => Number(r.brand_id));
+  },
+
+  fetchSelectedBrandNamesForUser: async function(userId, accountId) {
+    const result = await sails.sendNativeQuery(
+      `SELECT b.id AS id, b.name AS name
+       FROM user_account ua
+       JOIN user_account_brand uab ON uab.user_brand_access_id = ua.id
+       JOIN brand b ON b.id = uab.brand_id
+       WHERE ua.user_id = $1 AND ua.account_id = $2
+       ORDER BY b.name ASC`,
+      [safeNumber(userId), safeNumber(accountId)]
+    );
+    return result.rows.map(r => ({
+      id: Number(r.id),
+      name: r.name
+    }));
+  },
+
   createUserAccountBrand: async function(brandId, userBrandAccessId, dbSession = null) {
     const result = await sails.sendNativeQuery(
       'INSERT INTO user_account_brand (brand_id, user_brand_access_id) VALUES ($1, $2) RETURNING *',
       [safeNumber(brandId), safeNumber(userBrandAccessId)]
     );
     return result.rows[0];
+  },
+
+  deleteUserAccountBrands: async function(userId, accountId, dbSession = null) {
+    const result = await sails.sendNativeQuery(
+      `DELETE FROM user_account_brand 
+       WHERE user_brand_access_id IN (
+         SELECT id FROM user_account WHERE user_id = $1 AND account_id = $2
+       )`,
+      [safeNumber(userId), safeNumber(accountId)]
+    );
+    return result.rowCount;
   }
 };
 

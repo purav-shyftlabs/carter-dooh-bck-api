@@ -18,6 +18,10 @@ module.exports = {
             type: 'string',
             columnName: 'type'
         },
+        assetUrl: {
+            type: 'string',
+            columnName: 'asset_url'
+        },
         status: {
             type: 'string',
             columnName: 'status'

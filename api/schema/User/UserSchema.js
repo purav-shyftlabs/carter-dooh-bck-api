@@ -61,7 +61,10 @@ const editUserSchema = Joi.object({
   permissions: Joi.array().items(Joi.object({
     permissionType: Joi.string().required().valid(...Object.values(permissionType)),
     accessLevel: Joi.string().required().valid(...Object.values(accessLevel))
-  })).optional()
+  })).optional(),
+
+  // Brand access: array of brand IDs for users with limited access
+  allowedBrands: Joi.array().items(Joi.number()).optional()
 }).unknown(false);
 
 module.exports.editUserSchema = editUserSchema;

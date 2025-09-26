@@ -49,6 +49,16 @@ module.exports.policies = {
     '*': 'isAuthenticated'
   },
 
+  // ParentCompany Controller - All actions require JWT authentication
+  'parentCompany/ParentCompanyController': {
+    '*': 'isAuthenticated'
+  },
+
+  // Brand Controller - All actions require JWT authentication
+  'brand/BrandController': {
+    '*': 'isAuthenticated'
+  },
+
   // App Controller - Public access
   'app/AppController': {
     '*': true
