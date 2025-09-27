@@ -23,7 +23,26 @@ module.exports = async function(req, res, next) {
     // Add user info to request object
     // convert to the integer
     payload.userId = Number(payload.userId);
-    payload.selectedAccount = Number(payload.selectedAccount);
+    
+    // Handle selectedAccount - if not in token, get from user's current account
+    if (payload.selectedAccount) {
+      payload.selectedAccount = Number(payload.selectedAccount);
+    } else {
+      // Fallback: get current account from user record
+      try {
+        const User = require('../models/User/User');
+        const user = await User.findOne({ id: payload.userId });
+        if (user && user.currentAccountId) {
+          payload.selectedAccount = Number(user.currentAccountId);
+        } else {
+          throw new Error('No current account found for user');
+        }
+      } catch (error) {
+        console.error('Error getting user current account:', error);
+        throw new Error('Unable to determine user account');
+      }
+    }
+    
     req.user = payload;
     
     // Continue to next middleware/action

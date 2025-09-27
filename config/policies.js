@@ -62,6 +62,32 @@ module.exports.policies = {
   // App Controller - Public access
   'app/AppController': {
     '*': true
-  }
+  },
+
+  // Folder Controller - All actions require JWT authentication
+  'folder/FolderController': {
+    'create': 'isAuthenticated',
+    'list': 'isAuthenticated',
+    'getById': 'isAuthenticated',
+    'getContents': 'isAuthenticated'
+  },
+
+  // File Controller - All actions require JWT authentication except serving files
+  'file/FileController': {
+    'upload': 'isAuthenticated',
+    'list': 'isAuthenticated',
+    'getHierarchy': 'isAuthenticated',
+    'getAllWithParent': 'isAuthenticated',
+    'serveById': true, // Public access for serving files by ID
+    'serve': true // Public access for serving files
+  },
+
+  // Image Controller - All actions require JWT authentication except serving images
+  'image/ImageController': {
+    'upload': 'isAuthenticated',
+    'list': 'isAuthenticated',
+    'serve': true // Public access for serving images
+  },
+
 
 };

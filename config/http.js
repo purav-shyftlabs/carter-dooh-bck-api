@@ -47,15 +47,20 @@ module.exports.http = {
     *                                                                          *
     ***************************************************************************/
     cors: function(req, res, next) {
-      console.log('=== Incoming Request ===', req.method, req.url);
     
       res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin, X-HTTP-Method-Override');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, X-Requested-With, Origin, X-HTTP-Method-Override, Content-Disposition, Content-Length');
       res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Max-Age', '86400'); // 24 hours
     
       // Disable CSP completely
       res.header('Content-Security-Policy', '');
+    
+      // Add headers for file uploads
+      res.header('X-Content-Type-Options', 'nosniff');
+      res.header('X-Frame-Options', 'DENY');
+      res.header('X-XSS-Protection', '1; mode=block');
     
       if (req.method === 'OPTIONS') {
         return res.sendStatus(200);

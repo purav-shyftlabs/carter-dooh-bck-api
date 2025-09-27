@@ -12,10 +12,7 @@ module.exports.routes = {
 
   /***************************************************************************
   *                                                                          *
-  * Make the view located at `views/homepage.ejs` your home page.            *
-  *                                                                          *
-  * (Alternatively, remove this and add an `index.html` file in your         *
-  * `assets` directory)                                                      *
+  * Root route - API health check endpoint                                   *
   *                                                                          *
   ***************************************************************************/
 
@@ -71,4 +68,28 @@ module.exports.routes = {
   'POST /brands': { controller: 'brand/BrandController', action: 'create' },
   'GET /brands/:id': { controller: 'brand/BrandController', action: 'getById' },
   'PATCH /brands/:id': { controller: 'brand/BrandController', action: 'update' },
+
+  // folder routes
+  'POST /folders': { controller: 'folder/FolderController', action: 'create' },
+  'GET /folders': { controller: 'folder/FolderController', action: 'list' },
+  'GET /folders/:folderId/contents': { controller: 'folder/FolderController', action: 'getContents' },
+  'GET /folders/:id': { controller: 'folder/FolderController', action: 'getById' },
+
+  // file routes
+  'POST /files/upload': { controller: 'file/FileController', action: 'upload' },
+  'GET /files': { controller: 'file/FileController', action: 'list' },
+  'GET /files/hierarchy': { controller: 'file/FileController', action: 'getHierarchy' },
+  'GET /files/all': { controller: 'file/FileController', action: 'getAllWithParent' },
+  'GET /files/:fileId/download': { controller: 'file/FileController', action: 'serveById' },
+  'GET /uploads/files/:filename': { controller: 'file/FileController', action: 'serve' },
+  'GET /uploads/files/folder/:folderId/:filename': { controller: 'file/FileController', action: 'serve' },
+
+  // image routes - simple local storage
+  'POST /images/upload': { controller: 'image/ImageController', action: 'upload' },
+  'GET /images/list': { controller: 'image/ImageController', action: 'list' },
+  'GET /uploads/images/:filename': { controller: 'image/ImageController', action: 'serve' },
+
+  
+  // static file serving for uploads
+  'GET /uploads/*': { skipAssets: false },
 };
