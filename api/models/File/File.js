@@ -75,6 +75,19 @@ module.exports = {
       description: 'Whether all brands can access this file'
     },
 
+    status: {
+      type: 'string',
+      defaultsTo: 'active',
+      isIn: ['active', 'inactive', 'archived', 'deleted'],
+      description: 'File status'
+    },
+
+    description: {
+      type: 'string',
+      allowNull: true,
+      description: 'User-provided description of the file'
+    },
+
     metadata: {
       type: 'json',
       defaultsTo: {},

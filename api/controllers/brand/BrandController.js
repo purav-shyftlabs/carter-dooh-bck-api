@@ -11,7 +11,7 @@ module.exports = {
     }
 
     const value = await createBrandSchema.validateAsync(req.body);
-    console.log('value', value);
+    
     const result = await brandService.create(value, { currentUserId: userId, accountId: selectedAccount });
     return responseHelper.created(res, result, 'Brand created successfully');
   }, { action: 'BrandController.create' })

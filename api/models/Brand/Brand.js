@@ -1,5 +1,6 @@
 module.exports = {
     tableName: 'brand',
+    primaryKey: 'id',
     attributes: {
         id: {
             type: 'number',

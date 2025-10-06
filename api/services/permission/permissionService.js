@@ -39,20 +39,15 @@ module.exports = {
       ]);
 
       for (const permissionType of allPermissionTypes) {
-        console.log('\n\n\n\********* permissionType **********', permissionType);
         const currentLevel = currentMap[permissionType] || AccessLevel.NO_ACCESS;
-        console.log('currentLevel', currentLevel);
         // Check against Operator role defaults
         const operatorDefaultLevel = operatorUserPermissions[permissionType];
-        console.log('operatorDefaultLevel', operatorDefaultLevel);
         
         // Check against Admin role defaults
         const adminDefaultLevel = adminUserPermissions[permissionType];
-        console.log('adminDefaultLevel', adminDefaultLevel);
 
         // Skip if permission type is not defined in role defaults
         if (!operatorDefaultLevel && !adminDefaultLevel) {
-          console.log('Skipping permission type not found in role defaults:', permissionType);
           continue;
         }
         // Check Operator role only if it's defined
@@ -61,7 +56,6 @@ module.exports = {
           if (!currentCanAssignOperator) {
             showOperator = false;
           }
-          console.log('currentCanAssignOperator', currentCanAssignOperator);
         }
 
         // Check Admin role only if it's defined
@@ -70,7 +64,6 @@ module.exports = {
           if (!currentCanAssignAdmin) {
             showAdmin = false;
           }
-          console.log('currentCanAssignAdmin', currentCanAssignAdmin);
         }
         // Track differences for debugging
         const blocksOperator = operatorDefaultLevel && !aclCheck.checkAcl(permissionType, currentLevel, operatorDefaultLevel);
@@ -87,9 +80,7 @@ module.exports = {
           });
         }
       }
-      console.log('showOperator', showOperator);
-      console.log('showAdmin', showAdmin);
-      console.log('diffs', diffs);  
+      
       return { showOperator, showAdmin, diffs };
     },
 

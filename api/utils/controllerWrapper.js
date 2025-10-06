@@ -16,9 +16,10 @@ function withController(handler, options = {}) {
         return responseHelper.validationError(res, err.details, 'Validation failed');
       }
 
-      // Known business error with statusCode
-      if (err && err.statusCode) {
-        return responseHelper.error(res, err.message, err.statusCode, err.details);
+      // Known business error with explicit status (support both status and statusCode)
+      if (err && (err.status || err.statusCode)) {
+        const code = err.status || err.statusCode;
+        return responseHelper.error(res, err.message, code, err.details);
       }
 
       // Unknown error: log and mask

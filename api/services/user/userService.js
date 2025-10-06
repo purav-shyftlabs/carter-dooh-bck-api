@@ -245,7 +245,7 @@ module.exports = {
     try {
       // context: { currentUserId, accountId }
       const { currentUserId, accountId } = context || {};
-      console.log(currentUserId, accountId,'currentUserId and accountId');
+      
       if (currentUserId !== null && accountId !== null) {
       await userHelper.validateUserPermission(currentUserId, accountId, PermissionType.USER_MANAGEMENT, AccessLevel.FULL_ACCESS);
       // Ensure only publishers can create users
@@ -327,7 +327,7 @@ module.exports = {
       // Determine sorting from sortBy and sortType
       let sortColumn = sortBy ? String(sortBy) : null;
       sortColumn == "role" ? sortColumn = "role_type" : sortColumn == "advertisers" ? sortColumn = "allow_all_brands" : sortColumn;
-      console.log('sortColumn', sortColumn);
+      
       let sortAsc = true; // default ascending
       if (sortType !== undefined && sortType !== null) {
         const st = String(sortType).toLowerCase();

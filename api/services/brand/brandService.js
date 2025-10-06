@@ -23,7 +23,7 @@ module.exports = {
       // check if brand name is already exists
       const existingBrand = await brandRepository.findOneByName(data.name, accountId);
       if (existingBrand) {
-        console.log('Brand name already exists', data.name);
+        
         throw errorHelper.createError('Brand name already exists', 'BRAND_NAME_ALREADY_EXISTS', 400);
       }
 
@@ -32,7 +32,7 @@ module.exports = {
 
         const parentCompany = await parentCompanyRepository.findOneByIdAndAccount(data.parentCompanyId, accountId);
         if (!parentCompany) {
-          console.log('Parent company not found', data.parentCompanyId);
+          
           throw errorHelper.createError('Parent company not found', 'PARENT_COMPANY_NOT_FOUND', 404);
         }
       }

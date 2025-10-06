@@ -1,5 +1,6 @@
 module.exports = {
     tableName: 'user_account_brand',
+    // Don't specify primaryKey if the table already has a composite primary key
     attributes: {
         brandId: {
             type: 'number',

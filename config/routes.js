@@ -71,12 +71,21 @@ module.exports.routes = {
 
   // folder routes
   'POST /folders': { controller: 'folder/FolderController', action: 'create' },
+  'POST /folders/metadata': { controller: 'folder/FolderController', action: 'setMetadata' },
   'GET /folders': { controller: 'folder/FolderController', action: 'list' },
   'GET /folders/:folderId/contents': { controller: 'folder/FolderController', action: 'getContents' },
   'GET /folders/:id': { controller: 'folder/FolderController', action: 'getById' },
+  'GET /folders/:folderId/brand-access': { controller: 'folder/FolderController', action: 'getBrandAccess', policy: 'isAuthenticated' },
+  'GET /user/brand-access': { controller: 'folder/FolderController', action: 'getUserBrandAccess' },
+  
+  // File detail and edit
+  'GET /files/:fileId': { controller: 'file/FileController', action: 'getById', policy: 'isAuthenticated' },
+  'PUT /files/:fileId': { controller: 'file/FileController', action: 'edit', policy: 'isAuthenticated' },
+  'GET /files/:fileId/brand-access': { controller: 'file/FileController', action: 'getBrandAccess', policy: 'isAuthenticated' },
 
   // file routes
   'POST /files/upload': { controller: 'file/FileController', action: 'upload' },
+  'POST /files/metadata': { controller: 'file/FileController', action: 'setMetadata' },
   'GET /files': { controller: 'file/FileController', action: 'list' },
   'GET /files/hierarchy': { controller: 'file/FileController', action: 'getHierarchy' },
   'GET /files/all': { controller: 'file/FileController', action: 'getAllWithParent' },

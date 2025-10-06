@@ -1,11 +1,14 @@
 /**
- * Folder.js
+ * FileBrandAccess.js
  *
- * @description :: A model definition for folders in the file system
+ * @description :: A model definition for file brand access control
  * @docs        :: https://sailsjs.com/docs/concepts/models-and-orm/models
  */
 
 module.exports = {
+
+  tableName: 'file_brand_access',
+  primaryKey: 'id',
 
   attributes: {
 
@@ -13,51 +16,24 @@ module.exports = {
     //  ╠═╝╠╦╝║║║║║ ║ ║╚╗╔╝║╣ ╚═╗
     //  ╩  ╩╚╝╩╩ ╩╩ ╩ ╩ ╚╝ ╚═╝╚═╝
 
-    name: {
-      type: 'string',
-      required: true,
-      maxLength: 255
-    },
-
-    parent_id: {
+    id: {
       type: 'number',
-      allowNull: true,
-      columnName: 'parent_id',
-      description: 'Parent folder ID for hierarchical structure'
+      autoIncrement: true,
+      unique: true
     },
 
-    account_id: {
+    file_id: {
       type: 'number',
       required: true,
-      columnName: 'account_id',
-      description: 'Account this folder belongs to'
+      columnName: 'file_id',
+      description: 'ID of the file'
     },
 
-    owner_id: {
+    brand_id: {
       type: 'number',
       required: true,
-      columnName: 'owner_id',
-      description: 'User who created this folder'
-    },
-
-    allow_all_brands: {
-      type: 'boolean',
-      defaultsTo: false,
-      columnName: 'allow_all_brands',
-      description: 'Whether all brands can access this folder'
-    },
-
-    status: {
-      type: 'string',
-      defaultsTo: 'active',
-      isIn: ['active', 'inactive', 'archived', 'deleted'],
-      description: 'Folder status'
-    },
-
-    description: {
-      type: 'string',
-      allowNull: true,
-      description: 'User-provided description of the folder'
+      columnName: 'brand_id',
+      description: 'ID of the brand that can access this file'
     },
 
     //  ╔═╗╔╦╗╔╗ ╔═╗╔╦╗╔═╗

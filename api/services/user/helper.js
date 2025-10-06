@@ -21,7 +21,7 @@ module.exports = {
    * Validate a user's permission against required access
    */
   validateUserPermission: async function(userId, accountId, permissionType, requiredAccessLevel) {
-    console.log(userId, accountId, permissionType, requiredAccessLevel,'userId, accountId, permissionType, requiredAccessLevel');
+    
     // if (!userId) {
     //   throw errorHelper.createError('Unauthorized', 'UNAUTHORIZED', 401);
     // }
@@ -235,7 +235,7 @@ module.exports = {
         delay: 0 // Send immediately
       });
       
-      console.log(`Password reset email job scheduled for user ${user.email} with job ID: ${job.id}`);
+      
       return { 
         message: 'Password reset email scheduled successfully',
         jobId: job.id,
