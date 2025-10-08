@@ -93,6 +93,11 @@ module.exports.routes = {
   'GET /uploads/files/:filename': { controller: 'file/FileController', action: 'serve' },
   'GET /uploads/files/folder/:folderId/:filename': { controller: 'file/FileController', action: 'serve' },
 
+  // gcp utility routes
+  'POST /gcp/upload': { controller: 'file/GCPController', action: 'upload' },
+  'POST /gcp/upload-from-path': { controller: 'file/GCPController', action: 'uploadFromPath' },
+  'GET /gcp/file-exists': { controller: 'file/GCPController', action: 'exists' },
+
   // image routes - simple local storage
   'POST /images/upload': { controller: 'image/ImageController', action: 'upload' },
   'GET /images/list': { controller: 'image/ImageController', action: 'list' },
