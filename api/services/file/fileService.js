@@ -5,6 +5,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const repository = require('./fileRepository');
 const accessControl = require('../../utils/accessControlHelper');
+const gcpBucket = require('../../utils/gcpBucket');
 
 const uploadsDir = path.join(__dirname, '../../../uploads/files');
 
@@ -26,6 +27,20 @@ function detectContentTypeFromDataUrl(dataUrl, fallback) {
 }
 
 function buildPublicUrl(file) {
+  // Check if file has GCP URL in metadata first (regardless of current env setting)
+  if (file.metadata && file.metadata.gcpUrl) {
+    return file.metadata.gcpUrl;
+  }
+  
+  // For files without GCP URL, check current environment setting
+  const storageProvider = process.env.IMAGE_UPLOAD || 'LOCAL';
+  
+  if (storageProvider === 'GCP') {
+    // For GCP mode but no stored URL, return empty (shouldn't happen)
+    return '';
+  }
+  
+  // For LOCAL, build the local path
   return file.folder_id
     ? `/uploads/files/folder_${file.folder_id}/${file.name}`
     : `/uploads/files/${file.name}`;
@@ -156,12 +171,19 @@ module.exports = {
     let buffer;
     let originalFilename = filename || 'uploaded_file';
     let contentType = mimeType || 'application/octet-stream';
+    let isGcpUrl = false;
 
-    if (fileData.startsWith('data:')) {
+    // Check if fileData is a GCP URL
+    if (fileData.startsWith('https://storage.googleapis.com/') || fileData.startsWith('https://images.')) {
+      isGcpUrl = true;
+      console.log('[FileService] Received GCP URL:', fileData);
+    } else if (fileData.startsWith('data:')) {
+      // Handle base64 data
       const base64Data = fileData.split(',')[1];
       buffer = Buffer.from(base64Data, 'base64');
       contentType = detectContentTypeFromDataUrl(fileData, contentType);
     } else {
+      // Assume it's base64 data
       buffer = Buffer.from(fileData, 'base64');
     }
 
@@ -201,32 +223,80 @@ module.exports = {
       }
     }
 
-    // Generate unique name and persist to disk
+    // Generate unique name and handle storage based on IMAGE_UPLOAD env var
     const timestamp = Date.now();
     const randomString = crypto.randomBytes(8).toString('hex');
     const extension = path.extname(originalFilename) || '.bin';
     const uniqueFilename = `${timestamp}_${randomString}${extension}`;
-
-    const storagePath = ensureUploadsDir(folderId);
-    const filePath = path.join(storagePath, uniqueFilename);
-    fs.writeFileSync(filePath, buffer);
+    
+    const storageProvider = process.env.IMAGE_UPLOAD || 'LOCAL';
+    let fileUrl = '';
+    let storageKey = '';
+    
+    if (isGcpUrl) {
+      // Direct GCP URL - no upload needed
+      console.log('[FileService] Using provided GCP URL:', fileData);
+      fileUrl = fileData;
+      
+      // Extract filename from GCP URL for storage
+      const urlParts = fileData.split('/');
+      const gcpFilename = urlParts[urlParts.length - 1];
+      storageKey = gcpFilename;
+      
+      console.log('[FileService] GCP URL processed, filename:', gcpFilename);
+    } else if (storageProvider === 'GCP') {
+      // Upload to GCP
+      console.log('[FileService] Uploading to GCP:', uniqueFilename);
+      const tempFilePath = path.join(__dirname, '../../../temp', uniqueFilename);
+      
+      // Ensure temp directory exists
+      const tempDir = path.dirname(tempFilePath);
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      // Write buffer to temp file
+      fs.writeFileSync(tempFilePath, buffer);
+      
+      // Upload to GCP
+      const gcpUrl = await gcpBucket.uploadFileFromPath(tempFilePath);
+      fileUrl = gcpUrl;
+      
+      // Extract filename from GCP URL for storage
+      const urlParts = gcpUrl.split('/');
+      const gcpFilename = urlParts[urlParts.length - 1];
+      storageKey = gcpFilename; // Store only the filename from GCP URL
+      
+      // Clean up temp file
+      fs.unlinkSync(tempFilePath);
+      
+      console.log('[FileService] GCP upload successful:', gcpUrl, 'filename:', gcpFilename);
+    } else {
+      // Local storage (existing logic)
+      console.log('[FileService] Using local storage:', uniqueFilename);
+      const storagePath = ensureUploadsDir(folderId);
+      const filePath = path.join(storagePath, uniqueFilename);
+      fs.writeFileSync(filePath, buffer);
+      storageKey = folderId ? `folder_${folderId}/${uniqueFilename}` : uniqueFilename;
+    }
 
     // Persist DB
     const fileRecord = await repository.createFile({
-      name: uniqueFilename,
+      name: (isGcpUrl || storageProvider === 'GCP') ? storageKey : uniqueFilename, // Use GCP filename for GCP, local filename for local
       original_filename: originalFilename,
       folder_id: folderId || null,
       account_id: selectedAccount,
       owner_id: userId,
-      storage_key: folderId ? `folder_${folderId}/${uniqueFilename}` : uniqueFilename,
-      file_size: buffer.length,
+      storage_key: storageKey,
+      file_size: isGcpUrl ? 0 : buffer.length, // No file size for GCP URLs
       content_type: contentType,
       status: 'active',
       allow_all_brands: allowAllBrands || false,
       metadata: {
         originalName: originalFilename,
         uploadedAt: new Date().toISOString(),
-        storageProvider: 'local'
+        storageProvider: isGcpUrl ? 'gcp' : storageProvider.toLowerCase(),
+        gcpUrl: (isGcpUrl || storageProvider === 'GCP') ? fileUrl : null // Store GCP URL in metadata
       }
     });
 
@@ -237,11 +307,12 @@ module.exports = {
 
     return {
       fileId: fileRecord.id,
-      fileUrl: buildPublicUrl({ folder_id: folderId, name: uniqueFilename }),
+      fileUrl: (isGcpUrl || storageProvider === 'GCP') ? fileUrl : buildPublicUrl({ folder_id: folderId, name: uniqueFilename }),
       originalFilename,
-      fileSize: buffer.length,
+      fileSize: isGcpUrl ? 0 : buffer.length,
       contentType,
-      folderId: folderId || null
+      folderId: folderId || null,
+      storageProvider: isGcpUrl ? 'gcp' : storageProvider.toLowerCase()
     };
   },
 
@@ -481,6 +552,18 @@ module.exports = {
     const hasAccess = await accessControl.userHasFileAccess(userId, selectedAccount, file);
     if (!hasAccess) throw Object.assign(new Error('Access denied to this file'), { status: 403 });
 
+    // Check if file is stored in GCP
+    if (file.metadata && file.metadata.gcpUrl) {
+      console.log('[FileService] Serving GCP file:', file.metadata.gcpUrl);
+      return { 
+        isGcpFile: true, 
+        gcpUrl: file.metadata.gcpUrl, 
+        contentType: file.content_type || 'application/octet-stream',
+        originalFilename: file.original_filename 
+      };
+    }
+
+    // Local file serving (existing logic)
     const basePath = ensureUploadsDir(file.folder_id);
     const filePath = file.folder_id ? path.join(basePath, file.name) : path.join(uploadsDir, file.name);
     if (!fs.existsSync(filePath)) throw Object.assign(new Error('File not found on disk'), { status: 404 });
@@ -492,7 +575,7 @@ module.exports = {
     };
     const contentType = contentTypes[ext] || file.content_type || 'application/octet-stream';
 
-    return { filePath, stats, contentType, originalFilename: file.original_filename };
+    return { filePath, stats, contentType, originalFilename: file.original_filename, isGcpFile: false };
   },
 
   async serve({ reqUser, params }) {

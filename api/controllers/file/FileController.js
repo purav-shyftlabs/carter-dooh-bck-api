@@ -54,9 +54,18 @@ module.exports = {
 
   // Serve file by ID
   serveById: withController(async (req, res) => {
-    const { filePath, stats, contentType, originalFilename } = await fileService.serveById({ reqUser: req.user, params: req.params });
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Length', stats.size);
+    const result = await fileService.serveById({ reqUser: req.user, params: req.params });
+    
+    if (result.isGcpFile) {
+      // Redirect to GCP URL for GCP files
+      console.log('[FileController] Redirecting to GCP URL:', result.gcpUrl);
+      return res.redirect(result.gcpUrl);
+    }
+    
+    // Local file serving (existing logic)
+    const { filePath, stats, contentType, originalFilename } = result;
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', stats.size);
     res.setHeader('Cache-Control', 'public, max-age=31536000');
     res.setHeader('Content-Disposition', `inline; filename="${originalFilename}"`);
     fs.createReadStream(filePath).pipe(res);

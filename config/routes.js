@@ -68,6 +68,8 @@ module.exports.routes = {
   'POST /brands': { controller: 'brand/BrandController', action: 'create' },
   'GET /brands/:id': { controller: 'brand/BrandController', action: 'getById' },
   'PATCH /brands/:id': { controller: 'brand/BrandController', action: 'update' },
+  'PUT /brands/:id': { controller: 'brand/BrandController', action: 'update' },
+  'POST /brands/upload-asset': { controller: 'brand/BrandController', action: 'uploadAsset' },
 
   // folder routes
   'POST /folders': { controller: 'folder/FolderController', action: 'create' },
@@ -98,10 +100,6 @@ module.exports.routes = {
   'POST /gcp/upload-from-path': { controller: 'file/GCPController', action: 'uploadFromPath' },
   'GET /gcp/file-exists': { controller: 'file/GCPController', action: 'exists' },
 
-  // image routes - simple local storage
-  'POST /images/upload': { controller: 'image/ImageController', action: 'upload' },
-  'GET /images/list': { controller: 'image/ImageController', action: 'list' },
-  'GET /uploads/images/:filename': { controller: 'image/ImageController', action: 'serve' },
 
   
   // static file serving for uploads
