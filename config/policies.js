@@ -80,4 +80,11 @@ module.exports.policies = {
     '*': 'isAuthenticated'
   },
 
+  // GCP Controller - All actions require JWT authentication
+  'file/GCPController': {
+    '*': 'isAuthenticated'
+  },
+  'playlist/PlaylistController': {
+    '*': 'isAuthenticated'
+  },
 };

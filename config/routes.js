@@ -100,6 +100,16 @@ module.exports.routes = {
   'POST /gcp/upload-from-path': { controller: 'file/GCPController', action: 'uploadFromPath' },
   'GET /gcp/file-exists': { controller: 'file/GCPController', action: 'exists' },
 
+  // playlist routes
+  'POST /playlists': { controller: 'playlist/PlaylistController', action: 'create' },
+  'GET /playlists': { controller: 'playlist/PlaylistController', action: 'list' },
+  'GET /playlists/:id': { controller: 'playlist/PlaylistController', action: 'getById' },
+  'PUT /playlists/:id': { controller: 'playlist/PlaylistController', action: 'update' },
+  'DELETE /playlists/:id': { controller: 'playlist/PlaylistController', action: 'delete' },
+  'POST /playlists/:playlistId/contents': { controller: 'playlist/PlaylistController', action: 'addContents' },
+  'PUT /playlists/:playlistId/contents/reorder': { controller: 'playlist/PlaylistController', action: 'reorderContents' },
+  'PUT /playlist-contents/:id': { controller: 'playlist/PlaylistController', action: 'updateContent' },
+  'DELETE /playlist-contents/:id': { controller: 'playlist/PlaylistController', action: 'deleteContent' },
 
   
   // static file serving for uploads
